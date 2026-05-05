@@ -1,103 +1,167 @@
 /*
  * ============================================================
  *  MANGA RESET: Dunia yang Kulupa
- *  A Terminal Story Game in C++
+ *  Terminal Story Game — C++
  * ============================================================
- *  Data Structures Used:
- *  - Array       : dialog pools, choice arrays, reset monologs
- *  - Struct      : Character, Scene, Choice, GameState
- *  - Pointer     : Scene navigation via node pointers
- *  - Linked List : Story chapter chain & dialog history
- *  - Stack       : Game state save/restore for reset system
- *  - Queue       : Dialog display queue (sequential narration)
- *  - Graph/Tree  : Branching story tree (choices -> outcomes)
+ *  Struktur Data yang Digunakan:
+ *  1. Array       : pool event per chapter, array pilihan
+ *  2. Struct      : Event, Choice, Character, GameState, ChapterNode
+ *  3. Pointer     : navigasi linked list (EventNode*)
+ *  4. Linked List : daftar event aktif per sesi (Single Linked List)
+ *  5. Stack       : save/restore GameState saat restart
+ *  6. Queue       : display monolog restart baris per baris
+ *  7. Graph/Tree  : struktur chapter sebagai directed graph
+ *
+ *  CRUD:
+ *  - Tampilkan : render event aktif + poin ke layar
+ *  - Tambah    : insertNode() saat random pick event
+ *  - Ubah      : update poin di GameState setiap pilihan
+ *  - Hapus     : deleteNode() setelah event selesai
  * ============================================================
  */
 
 #include <iostream>
 #include <string>
+#include <vector>
 #include <queue>
 #include <stack>
-#include <vector>
-#include <limits>
 #include <cstdlib>
+#include <ctime>
+#include <limits>
+#include <algorithm>
 
 using namespace std;
+
+// ============================================================
+// KONSTANTA
+// ============================================================
+
+const int MAX_CHOICES    = 5;
+const int POOL_SIZE      = 10;
+const int MIN_EVENTS     = 4;
+const int MAX_EVENTS     = 6;
+const int STARTING_POINT = 50;
+const int WIN_POINT      = 100;
 
 // ============================================================
 // STRUCT DEFINITIONS
 // ============================================================
 
+// Struct: satu pilihan dalam sebuah event
+struct Choice {
+    string text;
+    int    pointDelta;   // poin yang berubah saat pilihan ini dipilih
+};
+
+// Struct: satu event / aktivitas yang bisa dipilih player
+struct Event {
+    int    id;
+    string title;        // nama event di menu
+    string narration;    // narasi saat event dibuka
+    Choice choices[MAX_CHOICES];
+    int    choiceCount;
+};
+
+// Struct: karakter dalam cerita
 struct Character {
     string name;
-    string role;         // "protagonist", "npc"
+    string role;
     string description;
 };
 
-struct Choice {
-    string text;
-    int    nextSceneId;  // -1 = wrong choice (triggers reset)
-    bool   isCorrect;
-};
-
-struct Scene {
-    int           id;
-    string        title;
-    string        narration;        // main story text
-    vector<string> dialogs;         // sequential dialog lines
-    Choice        choices[4];       // up to 4 choices (array)
-    int           choiceCount;
-    bool          isEnding;
-    int           endingType;       // 1, 2, 3
-};
-
+// Struct: state game saat ini
 struct GameState {
-    int  currentSceneId;
-    int  resetCount;
+    int  currentChapter;   // 1 atau 2
+    int  points;           // poin saat ini
+    int  restartCount;     // total restart sepanjang game
     bool gameOver;
     bool reachedEnding;
 };
 
 // ============================================================
-// LINKED LIST — Dialog History
+// LINKED LIST — Event Aktif
 // ============================================================
 
-struct DialogNode {
-    string     text;
-    DialogNode* next;
+struct EventNode {
+    Event       data;
+    EventNode*  next;
 };
 
-struct DialogHistory {
-    DialogNode* head;
-    int         count;
+struct ActiveEventList {
+    EventNode* head;
+    int        count;
 
-    DialogHistory() : head(nullptr), count(0) {}
+    ActiveEventList() : head(nullptr), count(0) {}
 
-    void push(const string& text) {
-        DialogNode* node = new DialogNode{text, head};
-        head = node;
+    // CRUD: Tambah — insert node baru di akhir list
+    void insertNode(const Event& e) {
+        EventNode* node = new EventNode{e, nullptr};
+        if (!head) {
+            head = node;
+        } else {
+            EventNode* cur = head;
+            while (cur->next) cur = cur->next;
+            cur->next = node;
+        }
         count++;
     }
 
-    void printAll() const {
-        cout << "\n--- Riwayat Pilihanmu ---\n";
-        DialogNode* cur = head;
-        // collect to print in order
-        vector<string> temp;
-        while (cur) {
-            temp.push_back(cur->text);
+    // CRUD: Hapus — hapus node berdasarkan id event
+    bool deleteNode(int eventId) {
+        if (!head) return false;
+        if (head->data.id == eventId) {
+            EventNode* tmp = head;
+            head = head->next;
+            delete tmp;
+            count--;
+            return true;
+        }
+        EventNode* cur = head;
+        while (cur->next && cur->next->data.id != eventId) {
             cur = cur->next;
         }
-        for (int j = (int)temp.size() - 1; j >= 0; j--) {
-            cout << "  " << (count - j) << ". " << temp[j] << "\n";
+        if (cur->next) {
+            EventNode* tmp = cur->next;
+            cur->next = tmp->next;
+            delete tmp;
+            count--;
+            return true;
         }
-        cout << "------------------------\n";
+        return false;
     }
 
-    ~DialogHistory() {
-        DialogNode* cur = head;
+    // CRUD: Tampilkan — cetak semua event aktif sebagai menu
+    void displayMenu() const {
+        cout << "\n  Apa yang ingin kamu lakukan?\n";
+        cout << "  ------------------------------\n";
+        EventNode* cur = head;
+        int i = 1;
         while (cur) {
-            DialogNode* nxt = cur->next;
+            cout << "  [" << i << "] " << cur->data.title << "\n";
+            cur = cur->next;
+            i++;
+        }
+        cout << "  ------------------------------\n";
+    }
+
+    // Ambil event berdasarkan posisi menu (1-based)
+    Event* getByMenuIndex(int idx) {
+        EventNode* cur = head;
+        int i = 1;
+        while (cur) {
+            if (i == idx) return &cur->data;
+            cur = cur->next;
+            i++;
+        }
+        return nullptr;
+    }
+
+    bool isEmpty() const { return head == nullptr; }
+
+    ~ActiveEventList() {
+        EventNode* cur = head;
+        while (cur) {
+            EventNode* nxt = cur->next;
             delete cur;
             cur = nxt;
         }
@@ -105,674 +169,616 @@ struct DialogHistory {
 };
 
 // ============================================================
-// LINKED LIST — Story Chapter Chain
-// ============================================================
-
-struct ChapterNode {
-    int          sceneId;
-    string       chapterTitle;
-    ChapterNode* next;
-};
-
-struct ChapterList {
-    ChapterNode* head;
-    ChapterNode* tail;
-
-    ChapterList() : head(nullptr), tail(nullptr) {}
-
-    void append(int sceneId, const string& title) {
-        ChapterNode* node = new ChapterNode{sceneId, title, nullptr};
-        if (!tail) { head = tail = node; }
-        else { tail->next = node; tail = node; }
-    }
-
-    void printProgress(int currentId) const {
-        cout << "\n--- Progress Cerita ---\n";
-        ChapterNode* cur = head;
-        while (cur) {
-            if (cur->sceneId == currentId)
-                cout << "  >> " << cur->chapterTitle << " (sekarang)\n";
-            else if (cur->sceneId < currentId)
-                cout << "  [v] " << cur->chapterTitle << "\n";
-            cur = cur->next;
-        }
-        cout << "-----------------------\n";
-    }
-
-    ~ChapterList() {
-        ChapterNode* cur = head;
-        while (cur) {
-            ChapterNode* nxt = cur->next;
-            delete cur;
-            cur = nxt;
-        }
-    }
-};
-
-// ============================================================
-// STACK — Game State for Reset System
+// STACK — Save/Restore GameState
 // ============================================================
 
 struct StateStack {
     stack<GameState> stk;
 
-    void save(const GameState& gs) { stk.push(gs); }
-
-    GameState restore() {
-        if (!stk.empty()) {
-            GameState gs = stk.top();
-            // don't pop — we restore to the very first state always
-            return gs;
-        }
-        return {0, 0, false, false};
+    void save(const GameState& gs) {
+        stk.push(gs);
     }
 
-    GameState getInitial() {
-        // get bottom of stack = initial state
-        stack<GameState> tmp = stk;
-        GameState init;
-        while (!tmp.empty()) { init = tmp.top(); tmp.pop(); }
-        return init;
+    // Ambil state awal chapter (bottom of stack untuk chapter ini)
+    GameState getChapterInitial() {
+        if (stk.empty()) return {1, STARTING_POINT, 0, false, false};
+        return stk.top();
+    }
+
+    void clear() {
+        while (!stk.empty()) stk.pop();
     }
 };
 
 // ============================================================
-// QUEUE — Dialog Display
+// QUEUE — Display Monolog Restart
 // ============================================================
 
-void displayDialogQueue(vector<string>& lines) {
+void displayMonologQueue(const vector<string>& lines) {
     queue<string> q;
-    for (auto& l : lines) q.push(l);
-
+    for (const auto& l : lines) q.push(l);
+    cout << "\n";
     while (!q.empty()) {
-        cout << q.front() << "\n";
+        cout << "  " << q.front() << "\n";
         q.pop();
     }
+    cout << "\n";
+}
+
+// ============================================================
+// GRAPH — Struktur Chapter
+// ============================================================
+/*
+ *  Directed Graph:
+ *
+ *  [Chapter 1] --( poin >= 100 )--> [Chapter 2] --( poin >= 100 )--> [Ending]
+ *       ^                                ^
+ *       |                                |
+ *  (poin <= 0, restart)           (poin <= 0, restart)
+ */
+
+struct ChapterNode {
+    int         id;          // 1, 2, atau 99 (ending)
+    string      title;
+    string      setting;
+    int         nextChapterId;   // id chapter berikutnya jika menang
+    int         failChapterId;   // id chapter yang diulang jika kalah
+};
+
+// Graph chapter disimpan sebagai array of nodes
+const int CHAPTER_COUNT = 3;
+ChapterNode chapterGraph[CHAPTER_COUNT];
+
+void buildChapterGraph() {
+    chapterGraph[0] = {1, "Chapter 1: Hari Pertama sebagai Haru",
+                       "Pagi hari di rumah keluarga Mizushima", 2, 1};
+    chapterGraph[1] = {2, "Chapter 2: Antara Sekolah dan Impian",
+                       "Sekolah dan sepulang sekolah",           99, 2};
+    chapterGraph[2] = {99, "Ending: Perjanjian dengan Ayah",
+                       "Rumah — malam hari",                     -1, -1};
+}
+
+ChapterNode* findChapterNode(int id) {
+    for (int i = 0; i < CHAPTER_COUNT; i++) {
+        if (chapterGraph[i].id == id) return &chapterGraph[i];
+    }
+    return nullptr;
+}
+
+// ============================================================
+// DATA: KARAKTER
+// ============================================================
+
+Character characters[] = {
+    {"Haru Mizushima", "protagonist",
+     "Pelajar SMA kelas 3. Pemimpi diam-diam yang ingin jadi content creator."},
+    {"Kenji Mizushima", "npc",
+     "Ayah Haru. Keras, disiplin, tapi menyimpan kepedulian yang dalam."},
+    {"Ibu Mizushima", "npc",
+     "Ibu Haru. Lembut, penengah, sering diam tapi selalu memperhatikan."},
+    {"Hana Mizushima", "npc",
+     "Kakak Haru, 21 tahun. Standar keluarga. Bekerja di perusahaan bagus."},
+    {"Dito", "npc",
+     "Teman sekelas Haru. Santai, sering ngajak main."},
+    {"Nisa", "npc",
+     "Teman sekelas Haru. Energik, update soal tren konten."},
+    {"Kaito", "npc",
+     "Content creator SMA yang menginspirasi Haru."},
+};
+
+// ============================================================
+// DATA: POOL EVENT CHAPTER 1 (10 event)
+// ============================================================
+
+Event poolChapter1[POOL_SIZE];
+
+void buildPoolChapter1() {
+
+    // Event 0: Alarm pagi
+    poolChapter1[0] = {
+        100, "Matikan alarm & mulai pagi",
+        "Alarm berbunyi pukul 05.30. Di meja ada jadwal harian\n"
+        "  yang ditulis Ayah dengan spidol merah.\n"
+        "  '05.45 - Olahraga pagi (lari 2 km)'\n"
+        "  Di pojok kertas: 'Terlambat = tidak ada uang jajan seminggu.'\n\n"
+        "  Kamu menatap jadwal itu. Masih ngantuk.",
+        {
+            {"Langsung bangun dan mulai lari sesuai jadwal.", +25},
+            {"Tidur lagi 15 menit, lari bisa nanti.", -20},
+            {"Lari di tempat saja di kamar — lebih praktis.", +5},
+        }, 3
+    };
+
+    // Event 1: Sarapan & pertanyaan Ayah
+    poolChapter1[1] = {
+        101, "Sarapan bersama Ayah",
+        "Meja makan. Ayah menaruh koran dan menatapmu.\n"
+        "  \"Haru. Nilai ulangan matematika minggu lalu.\"\n"
+        "  Bukan pertanyaan. Pernyataan. Ia sudah tahu nilaimu: 78.",
+        {
+            {"Jawab jujur: \"78, Ayah. Aku akan lebih giat.\"", +25},
+            {"Diam saja dan terus makan.", -15},
+            {"Berbohong: \"Sudah bagus, di atas rata-rata kelas.\"", -20},
+            {"Alihkan topik: \"Ibu, masakannya enak hari ini.\"", -10},
+        }, 4
+    };
+
+    // Event 2: Ngobrol dengan Hana
+    poolChapter1[2] = {
+        102, "Ngobrol dengan Hana (kakak)",
+        "Hana sudah rapi dengan seragam kantornya.\n"
+        "  Ia menuang kopi sambil berkata pelan:\n"
+        "  \"Haru, Ayah lagi banyak pikiran soal kerjaan.\n"
+        "   Jangan bikin masalah dulu, ya.\"\n\n"
+        "  Kamu menatapnya.",
+        {
+            {"Angguk dan bilang: \"Iya, Kak. Makasih info-nya.\"", +20},
+            {"Balik ke kamar tanpa menjawab.", -10},
+            {"Tanya balik: \"Emang kenapa, Kak? Cerita dong.\"", +15},
+            {"Senyum saja tanpa berkata apa-apa.", +5},
+        }, 4
+    };
+
+    // Event 3: Menemukan video Kaito
+    poolChapter1[3] = {
+        103, "Buka HP sebelum berangkat",
+        "Kamu sempat buka HP sebelum berangkat.\n"
+        "  Notifikasi: Kaito upload video baru.\n"
+        "  Judulnya: 'Cara Aku Mulai dari 0 Subscriber'\n\n"
+        "  Ayah ada di ruang sebelah. Waktu 10 menit sebelum berangkat.",
+        {
+            {"Tonton sebentar — 10 menit cukup untuk highlight-nya.", +15},
+            {"Simpan dulu untuk nonton nanti, sekarang fokus berangkat.", +20},
+            {"Langsung balas komentar di videonya.", -10},
+            {"Tutup HP dan lupakan.", -5},
+        }, 4
+    };
+
+    // Event 4: Jadwal tambahan Ayah
+    poolChapter1[4] = {
+        104, "Ayah menambahkan jadwal baru",
+        "Ayah keluar dari kamarnya dengan selembar kertas.\n"
+        "  \"Mulai minggu ini, tambah satu jam belajar malam. Jam 8 sampai 9.\"\n"
+        "  Ia menempelkan kertas itu di lemari.\n\n"
+        "  Itu artinya kamu tidak bisa rekam konten malam hari.",
+        {
+            {"\"Baik, Ayah.\" — Terima tanpa komplain.", +20},
+            {"\"Tapi Ayah, aku sudah punya jadwal sendiri—\" (potong di tengah)", -20},
+            {"Diam, tapi sudah mulai berpikir cara menyiasatinya.", +10},
+            {"\"Boleh aku belajar sendiri caranya, Ayah?\"", +15},
+        }, 4
+    };
+
+    // Event 5: Bertemu Ibu di dapur
+    poolChapter1[5] = {
+        105, "Bantu Ibu di dapur",
+        "Ibu sedang mencuci piring sendirian.\n"
+        "  Kamu bisa langsung pergi ke kamar,\n"
+        "  atau sebentar bantu.",
+        {
+            {"Langsung tawarkan diri bantu cuci piring.", +25},
+            {"Bilang mau bantu tapi malah cuma berdiri.", +5},
+            {"Langsung ke kamar — ada yang ingin dikerjakan.", -5},
+            {"Tanya Ibu soal Ayah: \"Ibu, Ayah kenapa akhir-akhir ini...\"", +15},
+        }, 4
+    };
+
+    // Event 6: Laptop tersembunyi
+    poolChapter1[6] = {
+        106, "Cek laptop tersembunyi",
+        "Di balik tumpukan binder, laptop tua itu menunggumu.\n"
+        "  Channel YouTube: 47 subscriber.\n"
+        "  Ada draft video yang belum diupload.\n"
+        "  Suara rumah sudah mulai sepi.",
+        {
+            {"Edit draft video dengan teliti, tapi jangan upload dulu.", +20},
+            {"Upload langsung tanpa diedit.", -15},
+            {"Tutup laptop — terlalu berisiko sekarang.", +5},
+            {"Rekam video baru dengan berbisik pelan.", +25},
+            {"Buka komentar lama dan baca satu per satu.", +10},
+        }, 5
+    };
+
+    // Event 7: Telepon teman
+    poolChapter1[7] = {
+        107, "Dito telepon mengajak keluar",
+        "HP bergetar. Dito nelpon.\n"
+        "  \"Haru! Nongkrong yuk, ada yang baru buka dekat sekolah.\n"
+        "   Nisa juga ikut. Santai aja, paling sejam.\"\n\n"
+        "  Ayah ada di rumah.",
+        {
+            {"Tolak dengan sopan: \"Nggak bisa hari ini, Dit.\"", +20},
+            {"Langsung iya tanpa pikir panjang.", -25},
+            {"Minta waktu dua jam lagi, baru keluar.", -10},
+            {"Tanya dulu ke Ibu apakah boleh keluar.", +15},
+        }, 4
+    };
+
+    // Event 8: Malam — belajar atau konten
+    poolChapter1[8] = {
+        108, "Pilihan malam: belajar atau konten",
+        "Pukul 20.00. Satu jam bebas sebelum jadwal belajar Ayah.\n"
+        "  Di mejamu: buku matematika dan laptop tersembunyi.\n"
+        "  Kamu hanya bisa pilih satu.",
+        {
+            {"Belajar matematika dulu — nilai 78 harus naik.", +20},
+            {"Buka laptop — satu jam cukup untuk rekam intro video.", +15},
+            {"Tiduran sambil scroll HP.", -20},
+            {"Belajar setengah jam, sisanya buat catatan ide konten.", +25},
+        }, 4
+    };
+
+    // Event 9: Cermin pagi
+    poolChapter1[9] = {
+        109, "Momen depan cermin",
+        "Kamu berdiri di depan cermin kamar mandi.\n"
+        "  Wajah Haru menatap balik.\n"
+        "  Untuk pertama kali, kamu sadar betapa beratnya hidup\n"
+        "  yang sedang kamu jalani — sebagai dirinya.\n\n"
+        "  Kamu bicara ke cermin.",
+        {
+            {"\"Aku bisa. Haru pasti bisa.\" — Ucapkan dengan yakin.", +25},
+            {"Diam saja dan pergi.", 0},
+            {"\"Kenapa hidup ini harus sekeras ini?\" — Keluh.", -10},
+            {"Latihan senyum untuk kamera video.", +15},
+        }, 4
+    };
+}
+
+// ============================================================
+// DATA: POOL EVENT CHAPTER 2 (10 event)
+// ============================================================
+
+Event poolChapter2[POOL_SIZE];
+
+void buildPoolChapter2() {
+
+    // Event 0: Pagi di sekolah
+    poolChapter2[0] = {
+        200, "Pagi di kelas — ulangan mendadak",
+        "Guru masuk dan langsung taruh lembar soal.\n"
+        "  \"Ulangan mendadak. Materi dua minggu terakhir.\"\n"
+        "  Kelas langsung riuh. Kamu belum review sama sekali.",
+        {
+            {"Tetap tenang — kerjakan semampu yang diingat.", +20},
+            {"Coba lirik jawaban Nisa yang duduk di sebelah.", -25},
+            {"Kosongin yang tidak tahu, fokus yang bisa dikerjakan.", +15},
+            {"Minta izin ke toilet untuk buka catatan HP.", -20},
+        }, 4
+    };
+
+    // Event 1: Istirahat — Dito ajak nonton live Kaito
+    poolChapter2[1] = {
+        201, "Istirahat — Kaito lagi live",
+        "Nisa lari ke mejamu sambil pegang HP.\n"
+        "  \"Haru! Kaito lagi live! Dia lagi bahas cara monetisasi\n"
+        "   channel kecil. Ini pas banget buat kamu!\"\n\n"
+        "  Masih ada 20 menit istirahat.",
+        {
+            {"Tonton live-nya sebentar — ini ilmu yang berguna.", +20},
+            {"Minta Nisa rekam/screenshot bagian pentingnya saja.", +15},
+            {"Ignore — fokus review pelajaran untuk jam selanjutnya.", +10},
+            {"Tonton sambil makan, tapi setengah konsentrasi.", +5},
+        }, 4
+    };
+
+    // Event 2: Guru BK memanggil
+    poolChapter2[2] = {
+        202, "Dipanggil Guru BK",
+        "\"Haru, masuk sebentar.\"\n\n"
+        "  Guru BK menutup pintu. Di mejanya ada print-out.\n"
+        "  Nilai Haru semester ini. Rata-rata: 76.\n"
+        "  \"Kamu siswa yang cerdas. Tapi kenapa nilainya segini?\"",
+        {
+            {"Jujur: \"Aku sedang cari cara seimbangkan semua hal, Bu.\"", +25},
+            {"Diam dan mengangguk saja.", -5},
+            {"Berjanji nilai akan naik tanpa penjelasan.", +10},
+            {"Alihkan: \"Saya tidak tahu, Bu. Mungkin soalnya sulit.\"", -15},
+        }, 4
+    };
+
+    // Event 3: Nisa tanya soal channel
+    poolChapter2[3] = {
+        203, "Nisa tanya soal channel YouTube",
+        "Nisa duduk di sebelahmu waktu pulang.\n"
+        "  \"Haru, aku tahu kamu punya channel YouTube.\n"
+        "   Aku nggak sengaja nemu. Videomu... bagus, Har.\n"
+        "   Kenapa nggak pernah cerita?\"\n\n"
+        "  Jantungmu berdegup.",
+        {
+            {"Ceritakan semuanya — impian, ketakutan, dan rencana.", +25},
+            {"Minta dia diam dan tidak cerita ke siapapun.", -10},
+            {"Pura-pura tidak tahu channel yang dimaksud.", -20},
+            {"Bilang itu cuma iseng, tidak serius.", -5},
+            {"Minta pendapat Nisa soal video-videomu.", +20},
+        }, 5
+    };
+
+    // Event 4: Pulang — ketemu Ayah di depan pintu
+    poolChapter2[4] = {
+        204, "Ketemu Ayah di depan pintu",
+        "Ayah berdiri di depan pintu saat kamu pulang.\n"
+        "  Jam 16.05. Lima menit terlambat dari jadwal.\n"
+        "  Ia menatapmu tanpa kata-kata.",
+        {
+            {"Minta maaf langsung dan jelaskan alasannya.", +20},
+            {"Pura-pura tidak sadar soal keterlambatan.", -20},
+            {"Diam dan masuk rumah dengan cepat.", -10},
+            {"\"Maaf, Ayah. Ada yang perlu aku ceritakan.\"", +25},
+        }, 4
+    };
+
+    // Event 5: Sore — tawaran kolaborasi dari Kaito
+    poolChapter2[5] = {
+        205, "DM dari Kaito",
+        "HP-mu berbunyi. DM masuk.\n"
+        "  Dari: @KaitoCreates\n"
+        "  \"Hei, aku nemu channel-mu. Kontenmu raw dan jujur.\n"
+        "   Mau kolaborasi video bareng minggu depan?\"\n\n"
+        "  Tanganmu gemetar sedikit.",
+        {
+            {"Balas: \"Mau banget! Kapan dan di mana?\"", -15},
+            {"Balas: \"Terima kasih. Boleh aku pikir dulu?\"", +25},
+            {"Tidak balas dulu — terlalu overwhelmed.", -5},
+            {"Balas dan langsung tanya soal teknis kolaborasi.", +15},
+        }, 4
+    };
+
+    // Event 6: Malam — konfrontasi tagihan internet
+    poolChapter2[6] = {
+        206, "Ayah tunjukkan tagihan internet",
+        "Makan malam. Ayah menaruh kertas di tengah meja.\n"
+        "  Tagihan internet. Ada highlight di satu baris:\n"
+        "  akses ke platform video, pukul 22.15, 47 menit.\n\n"
+        "  \"Jelaskan.\"",
+        {
+            {"Minta maaf dan berjanji tidak mengulangi.", -10},
+            {"Tunjukkan statistik channel: 47 subscriber, engagement rate.", +25},
+            {"Marah: \"Aku hanya ingin sedikit kebebasan!\"", -25},
+            {"Diam dan terima hukuman.", -15},
+            {"\"Ayah, boleh aku cerita sesuatu?\" — minta bicara baik-baik.", +20},
+        }, 5
+    };
+
+    // Event 7: Nulis di buku catatan
+    poolChapter2[7] = {
+        207, "Nulis rencana di buku catatan",
+        "Kamu buka buku catatan dan mulai nulis.\n"
+        "  Dua kolom: AKADEMIK dan KONTEN.\n"
+        "  Kalau ada proposal konkret untuk Ayah,\n"
+        "  mungkin ia mau mendengarkan.",
+        {
+            {"Tulis target nilai + jadwal konten yang realistis.", +25},
+            {"Nulis impian besar tanpa detail konkret.", +5},
+            {"Tutup buku — terlalu lelah untuk berpikir malam ini.", -10},
+            {"Tulis surat untuk Ayah alih-alih proposal.", +15},
+        }, 4
+    };
+
+    // Event 8: Malam — rekam video rahasia
+    poolChapter2[8] = {
+        208, "Rekam video rahasia malam ini",
+        "Pukul 22.00. Rumah sepi.\n"
+        "  Laptop terbuka. Kamera siap.\n"
+        "  Tapi kali ini bukan sekadar vlog —\n"
+        "  kamu ingin bikin sesuatu yang benar-benar jujur.",
+        {
+            {"Rekam video curahan hati soal keluarga dan impian.", +20},
+            {"Rekam tapi tidak upload — simpan untuk diri sendiri.", +15},
+            {"Upload video lama yang sudah diedit.", +5},
+            {"Matikan laptop — terlalu berisiko.", -5},
+        }, 4
+    };
+
+    // Event 9: Pagi sebelum sekolah — momen dengan Ibu
+    poolChapter2[9] = {
+        209, "Momen pagi bersama Ibu",
+        "Ibu duduk sendiri di dapur pagi-pagi.\n"
+        "  Ia memegang cangkir teh.\n"
+        "  Saat kamu masuk, ia tersenyum.\n"
+        "  \"Haru, Ibu mau bicara sebentar.\"",
+        {
+            {"Duduk dan dengarkan.", +25},
+            {"\"Maaf Bu, buru-buru. Nanti saja ya.\"", -10},
+            {"Duduk tapi sambil lihat HP.", -5},
+            {"Tanya duluan: \"Ibu mau bilang apa?\"", +15},
+        }, 4
+    };
 }
 
 // ============================================================
 // UTILITY FUNCTIONS
 // ============================================================
 
+void clearScreen() {
+    // Portable clear
+    cout << string(3, '\n');
+}
+
 void pressEnter() {
-    cout << "\n[Tekan ENTER untuk melanjutkan...]";
+    cout << "\n  [Tekan ENTER untuk melanjutkan...]";
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
     cin.get();
 }
 
 void printSeparator() {
-    cout << "\n============================================================\n";
+    cout << "\n  ============================================================\n";
 }
 
 void printLine() {
-    cout << "------------------------------------------------------------\n";
+    cout << "  ------------------------------------------------------------\n";
 }
 
-int getChoice(int max) {
+int getInput(int maxVal) {
     int c;
     while (true) {
-        cout << "\n> Pilihanmu: ";
-        if (cin >> c && c >= 1 && c <= max) {
+        cout << "\n  > Pilihanmu: ";
+        if (cin >> c && c >= 1 && c <= maxVal) {
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
             return c;
         }
         cin.clear();
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        cout << "  Masukkan angka antara 1 dan " << max << ".\n";
+        cout << "  Masukkan angka antara 1 dan " << maxVal << ".\n";
     }
 }
 
 // ============================================================
-// RESET MONOLOGS — Array of strings
+// MONOLOG RESTART (Array of strings)
 // ============================================================
 
-const string resetMonologs[] = {
-    // reset 1
+const string restartMonologs[] = {
+    // restart 1
     "\"Eh—?!\"\n\n"
-    "Dunia berputar. Langit jadi gelap. Aku merasakan tubuhku seperti\n"
-    "ditarik paksa ke belakang, ke dalam sesuatu yang dingin dan kosong.\n\n"
-    "Dan tiba-tiba... aku di sini lagi.\n\n"
-    "\"W-wait. Ini... ini bukan pertama kalinya aku lihat ini...\"\n\n"
-    "Aku salah. Pasti aku salah pilih. Sial.\n"
-    "Baik. Oke. Aku harus ingat-ingat lagi cerita manga itu...\n",
+    "  Dunia berputar. Semuanya gelap sedetik.\n"
+    "  Dan aku... di sini lagi.\n\n"
+    "  Oke. Oke. Tenang. Aku salah pilih sesuatu.\n"
+    "  Coba lagi. Kali ini lebih hati-hati.",
 
-    // reset 2
-    "\"TIDAK TIDAK TIDAK!\"\n\n"
-    "Lagi. Lagi dunia ini menarikku mundur.\n"
-    "Sensasinya seperti tenggelam — tapi ke atas. Aneh banget.\n\n"
-    "Dan semuanya... reset.\n\n"
-    "\"Ugh, aku udah dua kali gagal. Dua kali!\"\n\n"
-    "Aku mengepalkan tangan. Coba tenang. Pikir.\n"
-    "Manga itu... judulnya apa ya... aku baca 5 tahun lalu, saat kelas 2 SMP.\n"
-    "Kenapa aku nggak ingat-ingat lagi waktu itu?!\n",
+    // restart 2
+    "\"Lagi?!\"\n\n"
+    "  Sensasinya seperti ditarik mundur paksa.\n"
+    "  Dua kali. Aku sudah gagal dua kali.\n\n"
+    "  Tapi aku mulai mengerti polanya.\n"
+    "  Haru butuh keseimbangan — bukan cuma berani, tapi juga bijak.",
 
-    // reset 3
+    // restart 3
     "Kali ini tidak ada teriakan.\n\n"
-    "Aku sudah tahu rasanya. Dunia berputar, gelap, dingin.\n"
-    "Lalu muncul lagi. Di sini. Di awal.\n\n"
-    "\"...Tiga kali.\"\n\n"
-    "Aku duduk diam sebentar sebelum semuanya benar-benar muncul lagi.\n"
-    "Oke. Sistemnya jelas: ada satu pilihan yang benar di setiap situasi.\n"
-    "Kalau salah, balik ke awal. Tanpa ampun.\n\n"
-    "Aku harus berpikir seperti pembaca manga, bukan seperti diri sendiri.\n"
-    "Apa yang akan dilakukan MC yang benar?\n",
+    "  Aku sudah tahu rasanya. Dingin. Gelap. Kembali lagi.\n\n"
+    "  Tiga kali. Oke.\n"
+    "  Aku harus berpikir seperti Haru — bukan seperti diri sendiri.\n"
+    "  Apa yang akan dilakukan seseorang yang mau menang\n"
+    "  tanpa kehilangan segalanya?",
 
-    // reset 4
-    "\"...Ha.\"\n\n"
-    "Aku ketawa kecil waktu dunia itu mulai berputar lagi.\n"
-    "Empat kali. Sudah empat kali.\n\n"
-    "Entah kenapa sekarang rasanya lebih seperti permainan daripada mimpi buruk.\n"
-    "Atau mungkin aku mulai gila? Dua kemungkinan yang sama valid.\n\n"
-    "\"Oke, Haru.\" — itu nama MC di manga ini kalau aku nggak salah ingat —\n"
-    "\"Kamu tipe anak yang gimana sih?\"\n\n"
-    "Aku mulai mengingat. Sedikit demi sedikit.\n",
-
-    // reset 5+
-    "Dunia berputar. Gelap. Dingin. Muncul lagi.\n\n"
-    "Sudah berapa kali ini? Aku sudah berhenti menghitung.\n\n"
-    "Tapi aku semakin dekat. Aku bisa merasakannya.\n"
-    "Setiap kali aku gagal, aku mendapat satu petunjuk lebih.\n\n"
-    "\"Aku pasti bisa. Pasti.\"\n\n"
-    "Kali ini — aku sudah ingat lebih banyak.\n"
-    "Ayo, Haru. Ayo.\n",
+    // restart 4+
+    "Dunia berputar. Kembali lagi.\n\n"
+    "  Sudah berapa kali ini?\n"
+    "  Tapi aku semakin dekat. Aku bisa merasakannya.\n\n"
+    "  Kali ini — aku sudah tahu lebih banyak.\n"
+    "  Ayo, Haru. Ayo.",
 };
-const int RESET_MONOLOG_COUNT = 5;
+const int MONOLOG_COUNT = 4;
 
 // ============================================================
-// SCENE DATABASE — Story Tree (Graph/Tree)
+// RANDOM PICK EVENT (Fisher-Yates)
 // ============================================================
-/*
- *  Scene Graph:
- *
- *  0 (Prolog)
- *  └─► 1 (Bangun Pagi)
- *      ├─► RESET (salah)
- *      └─► 2 (Sarapan)
- *          ├─► RESET (salah)
- *          └─► 3 (Pulang Sekolah)
- *              ├─► RESET (salah)
- *              └─► 4 (Malam — Buat Konten)
- *                  ├─► RESET (salah)
- *                  └─► 5 (Ketahuan)
- *                      ├─► RESET (salah)
- *                      └─► 6 (Konfrontasi)
- *                          ├─► RESET (salah)
- *                          └─► 7 (Persimpangan)
- *                              ├─► ENDING 1: Patuh
- *                              ├─► ENDING 2: Lari
- *                              └─► ENDING 3: Negosiasi
- */
 
-Scene scenes[20];
-int   sceneCount = 0;
+void randomPickEvents(Event* pool, int poolSize,
+                      int pickMin, int pickMax,
+                      ActiveEventList& activeList) {
+    // Buat index array dan shuffle
+    vector<int> indices(poolSize);
+    for (int i = 0; i < poolSize; i++) indices[i] = i;
 
-void buildSceneDatabase() {
-
-    // ── SCENE 0 : Prolog ─────────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id            = 0;
-        s.title         = "Prolog: Dunia yang Kulupa";
-        s.choiceCount   = 0;
-        s.isEnding      = false;
-        s.narration =
-            "Namaku Ren. 18 tahun. Otaku.\n\n"
-            "Hari itu biasa saja. Aku pulang dari toko manga langgananku,\n"
-            "menenteng tiga volume baru sambil mempertimbangkan mau baca yang mana\n"
-            "duluan. Langit sore berwarna oranye. Jalanan ramai.\n\n"
-            "Dan kemudian...\n\n"
-            "...truk.\n\n"
-            "Aku tidak sempat berteriak.\n\n"
-            "---\n\n"
-            "Saat mataku terbuka, ini bukan kamarku.\n"
-            "Ini bukan langit-langit putih yang biasa kulihat setiap pagi.\n\n"
-            "Ini kamar orang lain. Rapi. Akademis. Ada poster jadwal pelajaran\n"
-            "di dinding. Ada meja belajar penuh buku. Ada satu laptop tua\n"
-            "di pojokan yang tampaknya sengaja disembunyikan di balik tumpukan binder.\n\n"
-            "Dan di cermin di depanku...\n"
-            "bukan wajahku.\n\n"
-            "\"Ini... Haru?\"\n\n"
-            "Suara yang keluar dari mulutku bukan suaraku.\n"
-            "Tapi aku ingat nama itu.\n\n"
-            "Haru Mizushima. MC dari sebuah manga slice of life yang aku baca\n"
-            "sekitar 5 tahun lalu. Judulnya... apa ya...\n"
-            "Aku sudah lupa banyak detailnya.\n\n"
-            "Yang aku ingat: hidupnya keras. Keluarganya keras.\n"
-            "Dan ada satu cerita yang harus dijalani.\n\n"
-            "Aku tidak punya pilihan lain selain... menjalaninya.\n\n"
-            "Semoga aku ingat cukup banyak untuk tidak merusaknya.\n";
-        s.dialogs = {};
+    // Fisher-Yates shuffle
+    for (int i = poolSize - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        swap(indices[i], indices[j]);
     }
 
-    // ── SCENE 1 : Bangun Pagi ────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 1;
-        s.title       = "Chapter 1: Pagi di Keluarga Mizushima";
-        s.isEnding    = false;
-        s.narration =
-            "Alarm berbunyi pukul 05.30.\n\n"
-            "Dari bawah terdengar suara langkah kaki tegas — itu pasti Ayah.\n"
-            "Suara pintu dapur dibuka. Suara kompor. Aroma nasi.\n\n"
-            "Di meja belajar ada selembar kertas. Jadwal harian yang ditulis tangan\n"
-            "dengan spidol merah oleh seseorang — pasti orang tua Haru.\n\n"
-            "  05.30 - Bangun\n"
-            "  05.45 - Olahraga pagi (lari 2 km)\n"
-            "  06.15 - Mandi & siap\n"
-            "  06.45 - Sarapan bersama\n"
-            "  07.00 - Berangkat sekolah\n\n"
-            "Di pojok kertas ada tulisan kecil: 'Kalau terlambat satu menit,\n"
-            "tidak ada uang jajan seminggu.'\n\n"
-            "Aku menatap jadwal itu. Lari 2 km sebelum subuh?\n"
-            "Ini serius?\n\n"
-            "Tapi aku ingat samar-samar — di manga ini, ada momen pagi yang jadi\n"
-            "turning point. Haru melakukan sesuatu sebelum sarapan.\n"
-            "Apa ya...\n";
-        s.dialogs = {};
-        s.choiceCount = 3;
-        s.choices[0] = {"Ikuti jadwal — langsung lari 2 km sesuai yang tertulis.", 2, true};
-        s.choices[1] = {"Tidur lagi sebentar. Masih ngantuk dan capek.", -1, false};
-        s.choices[2] = {"Duduk di meja belajar dan mulai belajar — lebih produktif daripada lari.", -1, false};
-    }
+    // Tentukan jumlah event yang dipilih
+    int pickCount = pickMin + (rand() % (pickMax - pickMin + 1));
 
-    // ── SCENE 2 : Sarapan ────────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 2;
-        s.title       = "Chapter 2: Meja Makan Keluarga Mizushima";
-        s.isEnding    = false;
-        s.narration =
-            "Meja makan keluarga Mizushima adalah tempat paling tegang di rumah ini.\n\n"
-            "Ayah — Mizushima Kenji — duduk di ujung meja dengan koran di tangan.\n"
-            "Ia tidak melihat ke arahku. Tapi kehadirannya terasa seperti tekanan fisik.\n"
-            "Ibu menyajikan miso sup tanpa bicara.\n\n"
-            "Kakakku — Hana, 21 tahun — sudah duduk rapi dengan seragam kantornya.\n"
-            "Ia adalah 'standar' yang selalu disebut Ayah: 'Lihat kakakmu, nilai sempurna,\n"
-            "kerja di perusahaan bagus, tidak memalukan.'\n\n"
-            "Aku — Haru — duduk dan mulai makan.\n\n"
-            "Ayah menaruh koran. Menatapku.\n\n"
-            "\"Haru. Nilai ulangan matematika minggu lalu.\"\n\n"
-            "Bukan pertanyaan. Pernyataan. Ia sudah tahu.\n\n"
-            "Aku ingat samar-samar — ada momen di manga ini soal nilai.\n"
-            "Haru mendapat nilai berapa ya... 78? 82?\n"
-            "Yang penting, jawabannya bukan sempurna.\n\n"
-            "Ayah menunggu.\n";
-        s.dialogs = {
-            "Ayah: \"Nilai ulangan matematika minggu lalu.\"\n",
-        };
-        s.choiceCount = 3;
-        s.choices[0] = {"Jawab jujur dengan tenang: \"78, Ayah. Aku akan lebih giat belajar.\"", 3, true};
-        s.choices[1] = {"Diam saja dan pura-pura tidak dengar.", -1, false};
-        s.choices[2] = {"Berbohong: \"Sudah bagus kok, Ayah. Di atas rata-rata kelas.\"", -1, false};
-    }
-
-    // ── SCENE 3 : Pulang Sekolah ─────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 3;
-        s.title       = "Chapter 3: Sepulang Sekolah";
-        s.isEnding    = false;
-        s.narration =
-            "Sekolah berakhir pukul 15.30.\n\n"
-            "Teman sekelas Haru — Dito dan Nisa — mengajakku mampir ke kafe kecil\n"
-            "dekat sekolah. Mereka tahu aku jarang bisa keluar.\n\n"
-            "Dito: \"Ayolah, Haru. Sekali-kali. Kita nggak lama.\"\n"
-            "Nisa: \"Iya, ada konten kreator yang lagi live di sana. Tau nggak, si Kaito?\n"
-            "       Dia yang bikin video tentang kehidupan SMA itu. Seru banget.\"\n\n"
-            "Hatiku bereaksi ke nama itu.\n"
-            "Kaito. Ya — aku ingat. Di manga ini Kaito adalah orang yang pertama kali\n"
-            "menginspirasi Haru untuk mulai membuat konten.\n\n"
-            "Tapi ada jadwal. Haru harus pulang sebelum pukul 16.00.\n"
-            "Kalau terlambat, Ayah sudah menunggu di depan pintu dengan muka datar\n"
-            "yang sepuluh kali lebih menakutkan daripada ekspresi marah.\n\n"
-            "Aku melihat jam. 15.40.\n";
-        s.dialogs = {
-            "Dito: \"Ayolah, Haru. Sekali-kali.\"\n",
-            "Nisa: \"Ada Kaito lagi live di sana! Yang bikin video kehidupan SMA itu.\"\n",
-        };
-        s.choiceCount = 3;
-        s.choices[0] = {"Tolak dengan sopan dan langsung pulang tepat waktu.", 4, true};
-        s.choices[1] = {"Ikut ke kafe — mumpung ada Kaito, ini kesempatan langka.", -1, false};
-        s.choices[2] = {"Minta Nisa kirimkan rekaman live-nya saja, lalu pulang.", -1, false};
-    }
-
-    // ── SCENE 4 : Malam — Buat Konten ────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 4;
-        s.title       = "Chapter 4: Kamar dan Rahasia";
-        s.isEnding    = false;
-        s.narration =
-            "Pukul 22.00. Rumah sudah sepi.\n\n"
-            "Suara TV dari kamar orang tua sudah mati sejak setengah jam lalu.\n"
-            "Hana sudah tidur. Ayah dan Ibu sudah tidur.\n\n"
-            "Aku duduk di depan laptop tua yang tersembunyi di balik binder.\n"
-            "Layarnya redup — aku sudah pasang kecerahan paling rendah.\n"
-            "Kipasnya berisik, jadi aku taruh bantal tipis di bawahnya.\n\n"
-            "Di channel YouTube Haru yang masih kecil — 47 subscriber —\n"
-            "ada draft video yang belum diupload.\n\n"
-            "Judulnya: 'Hari Biasa Pelajar yang Tidak Bebas — Vlog #3'\n\n"
-            "Aku menatap tombol upload.\n\n"
-            "Di manga ini... apa yang dilakukan Haru malam itu?\n"
-            "Aku ingat ada momen krusial. Ia membuat sesuatu.\n"
-            "Bukan sekadar upload. Tapi sesuatu yang lebih... personal.\n";
-        s.dialogs = {};
-        s.choiceCount = 4;
-        s.choices[0] = {"Upload video yang sudah ada, lalu tidur.", -1, false};
-        s.choices[1] = {"Rekam video baru — curahan hati soal keluarga — dengan berbisik pelan.", 5, true};
-        s.choices[2] = {"Tutup laptop dan tidur. Terlalu berisiko malam ini.", -1, false};
-        s.choices[3] = {"Edit video lama sampai sempurna, tapi tidak upload.", -1, false};
-    }
-
-    // ── SCENE 5 : Ketahuan ───────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 5;
-        s.title       = "Chapter 5: Suara di Balik Pintu";
-        s.isEnding    = false;
-        s.narration =
-            "Aku sedang berbisik ke kamera — menceritakan hari ini, perasaan tertekan,\n"
-            "mimpi yang terasa semakin jauh — ketika...\n\n"
-            "Ketukan pintu.\n\n"
-            "Bukan ketukan biasa. Tiga kali. Pelan. Tapi tegas.\n\n"
-            "Aku mematikan laptop dalam satu gerakan. Jantungku berhenti sedetik.\n\n"
-            "\"Haru.\"\n\n"
-            "Suara Ayah.\n\n"
-            "Hening. Ia menunggu di luar.\n\n"
-            "Aku menatap pintu. Laptop sudah mati. Kabel sudah kusembunyikan.\n"
-            "Tapi apakah ia mendengar?\n\n"
-            "Di manga ini, momen ini adalah salah satu yang paling aku ingat.\n"
-            "Bukan karena dramanya — tapi karena reaksi Haru.\n"
-            "Ia tidak panik. Ia melakukan sesuatu yang sangat spesifik.\n";
-        s.dialogs = {
-            "Ayah: \"Haru.\"\n",
-            "Hening.\n",
-            "Ayah: \"Sudah jam berapa sekarang?\"\n",
-        };
-        s.choiceCount = 4;
-        s.choices[0] = {"Buka pintu secepatnya dan bilang: \"Baru saja mau tidur, Ayah.\"", -1, false};
-        s.choices[1] = {"Pura-pura sudah tidur — tidak menjawab sama sekali.", -1, false};
-        s.choices[2] = {"Jawab dari balik pintu dengan suara mengantuk: \"Sudah mau tidur, Ayah. Maaf.\"", 6, true};
-        s.choices[3] = {"Buka pintu dan tanya balik: \"Ada apa, Ayah?\"", -1, false};
-    }
-
-    // ── SCENE 6 : Konfrontasi ────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 6;
-        s.title       = "Chapter 6: Pagi yang Berbeda";
-        s.isEnding    = false;
-        s.narration =
-            "Keesokan paginya.\n\n"
-            "Aku turun ke meja makan seperti biasa.\n"
-            "Tapi atmosfernya berbeda.\n\n"
-            "Ibu tidak bicara. Hana pergi lebih awal dari biasanya.\n"
-            "Dan Ayah — Ayah duduk dengan selembar kertas di tangannya.\n\n"
-            "Aku melihat apa itu.\n\n"
-            "Laporan tagihan internet bulanan. Dengan highlight kuning di satu baris:\n"
-            "akses ke platform video malam hari, pukul 22.15, durasi 47 menit.\n\n"
-            "\"Duduk.\"\n\n"
-            "Aku duduk.\n\n"
-            "Ayah menaruh kertas itu di hadapanku.\n\n"
-            "\"Jelaskan.\"\n\n"
-            "Ini dia. Momen yang aku takutkan.\n"
-            "Dan sekaligus... momen yang aku tunggu.\n"
-            "Karena di manga ini, Haru tidak menyerah di sini.\n"
-            "Ia melakukan sesuatu. Tapi apa?\n";
-        s.dialogs = {
-            "Ayah: \"Duduk.\"\n",
-            "Ayah: \"Jelaskan.\"\n",
-            "Haru menatap kertas tagihan itu.\n",
-        };
-        s.choiceCount = 4;
-        s.choices[0] = {"Minta maaf dan berjanji tidak mengulangi.", -1, false};
-        s.choices[1] = {"Marah dan berteriak: \"Aku hanya ingin sedikit kebebasan!\"", -1, false};
-        s.choices[2] = {"Tunjukkan statistik channel: 47 subscriber, engagement rate, dan bilang ini serius.", 7, true};
-        s.choices[3] = {"Diam saja dan terima hukuman.", -1, false};
-    }
-
-    // ── SCENE 7 : Persimpangan — Pilih Ending ────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 7;
-        s.title       = "Chapter 7: Persimpangan";
-        s.isEnding    = false;
-        s.narration =
-            "Ayah diam lama setelah melihat statistik channel Haru.\n\n"
-            "Bukan diam yang marah. Diam yang... memproses.\n\n"
-            "Ibu masuk ke ruang makan dengan teh — ia pasti sudah mendengar semuanya\n"
-            "dari dapur.\n\n"
-            "Ayah akhirnya bicara:\n"
-            "\"Aku tidak pernah bilang kamu harus menjadi apa.\"\n"
-            "\"Aku hanya tidak mau kamu menyesal.\"\n\n"
-            "Kalimat itu menggantung di udara.\n\n"
-            "Haru — aku — menatap Ayah.\n"
-            "Dan untuk pertama kali dalam waktu yang lama, aku melihat sesuatu\n"
-            "di balik ekspresi keras itu:\n"
-            "kekhawatiran.\n\n"
-            "Ini persimpangan.\n"
-            "Di manga ini ada beberapa jalan yang bisa dipilih Haru.\n"
-            "Semua valid. Semua dengan konsekuensinya masing-masing.\n\n"
-            "Apa pilihanmu?\n";
-        s.dialogs = {
-            "Ayah: \"Aku tidak pernah bilang kamu harus menjadi apa.\"\n",
-            "Ayah: \"Aku hanya tidak mau kamu menyesal.\"\n",
-        };
-        s.choiceCount = 3;
-        // All 3 lead to endings
-        s.choices[0] = {"[ENDING 1] Setuju dengan Ayah — prioritaskan akademik, jadikan konten hobi sampingan.", 10, true};
-        s.choices[1] = {"[ENDING 2] Tolak dengan hormat — minta izin resmi untuk serius jadi content creator.", 11, true};
-        s.choices[2] = {"[ENDING 3] Tawarkan kompromi — nilai tetap dijaga, tapi diberi waktu khusus untuk konten.", 12, true};
-    }
-
-    // ── ENDING 1 ─────────────────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 10;
-        s.title       = "ENDING 1: Anak yang Patuh";
-        s.isEnding    = true;
-        s.endingType  = 1;
-        s.choiceCount = 0;
-        s.narration =
-            "\"Baik, Ayah. Aku mengerti.\"\n\n"
-            "Aku menunduk.\n\n"
-            "Tidak ada drama. Tidak ada air mata.\n"
-            "Hanya... ketenangan yang agak menyakitkan.\n\n"
-            "Aku menutup laptop itu rapat-rapat malam itu.\n"
-            "Channel dengan 47 subscriber itu tidak diupdate selama tiga bulan.\n\n"
-            "Tapi nilai matematikaku naik ke 91.\n"
-            "Ayah mengangguk saat melihat rapor.\n"
-            "Itu sudah lebih dari cukup untuk Ibu menangis haru.\n\n"
-            "Suatu sore, diam-diam, aku membuka channel itu lagi.\n"
-            "Bukan untuk upload.\n"
-            "Hanya untuk melihat.\n\n"
-            "Subscriber masih 47.\n"
-            "Tapi ada satu komentar baru dari tiga bulan lalu:\n"
-            "\"Haru, video-videomu bikin aku ngerasa nggak sendiri. Kapan upload lagi?\"\n\n"
-            "Aku menutup tab itu.\n"
-            "Besok masih ada ujian.\n\n"
-            "---\n\n"
-            "Dunia manga ini berjalan seperti seharusnya.\n"
-            "Dan aku — Ren — merasakan sesuatu yang hangat sekaligus berat\n"
-            "saat kesadaranku perlahan kembali ke dunia asalku.\n\n"
-            "Tidak semua cerita berakhir dengan dramatis.\n"
-            "Kadang ending paling nyata adalah yang paling sunyi.\n\n"
-            "                    [ ENDING 1 — SELESAI ]\n"
-            "          \"Kadang memilih damai adalah bentuk keberanian juga.\"\n";
-        s.dialogs = {};
-    }
-
-    // ── ENDING 2 ─────────────────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 11;
-        s.title       = "ENDING 2: Langkah Sendiri";
-        s.isEnding    = true;
-        s.endingType  = 2;
-        s.choiceCount = 0;
-        s.narration =
-            "\"Aku minta maaf, Ayah. Tapi ini yang aku mau.\"\n\n"
-            "Suara Haru tidak gemetar.\n"
-            "Itu mengejutkan Ayah — aku bisa melihatnya dari cara alisnya sedikit naik.\n\n"
-            "\"Aku tahu risikonya. Aku tahu ini tidak mudah.\n"
-            " Tapi aku ingin mencobanya dengan sungguh-sungguh.\n"
-            " Bukan diam-diam. Secara resmi. Dengan persetujuanmu — atau tanpanya.\"\n\n"
-            "Hening yang panjang.\n\n"
-            "Ayah berdiri. Berjalan ke jendela. Memandang ke luar.\n\n"
-            "\"Kamu tidak akan berubah pikiran?\"\n\n"
-            "\"Tidak.\"\n\n"
-            "Ayah tidak bilang iya. Tapi ia juga tidak bilang tidak.\n"
-            "Ia hanya mengangguk satu kali, pelan, dan pergi ke kamarnya.\n\n"
-            "Itu sudah cukup.\n\n"
-            "Tiga bulan kemudian, channel Haru punya 2.400 subscriber.\n"
-            "Video tentang 'Keluarga Keras dan Impian yang Tidak Boleh Mati'\n"
-            "ditonton 180.000 kali.\n\n"
-            "Ayah tidak pernah menyebut angka itu.\n"
-            "Tapi suatu hari Ibu bisik ke Haru:\n"
-            "\"Ayahmu... aku lihat dia menonton videomu semalam.\"\n\n"
-            "---\n\n"
-            "Aku — Ren — tersenyum sebelum dunia ini perlahan memudar.\n\n"
-            "Ada yang tidak perlu disetujui untuk tetap dicintai.\n\n"
-            "                    [ ENDING 2 — SELESAI ]\n"
-            "              \"Berani bukan berarti tidak takut —\n"
-            "               berani adalah tetap melangkah meski takut.\"\n";
-        s.dialogs = {};
-    }
-
-    // ── ENDING 3 ─────────────────────────────────────────────
-    {
-        Scene& s = scenes[sceneCount++];
-        s.id          = 12;
-        s.title       = "ENDING 3: Jalan Tengah";
-        s.isEnding    = true;
-        s.endingType  = 3;
-        s.choiceCount = 0;
-        s.narration =
-            "\"Aku punya usul, Ayah.\"\n\n"
-            "Aku membuka halaman baru di buku catatanku.\n"
-            "Menulis dua kolom: AKADEMIK dan KONTEN.\n\n"
-            "\"Nilai rata-rata di atas 85 — itu janjiku.\n"
-            " Sebagai gantinya, aku minta dua jam setiap hari Jumat dan Sabtu.\n"
-            " Kalau nilaiku turun di bawah itu, aku sendiri yang akan berhenti.\"\n\n"
-            "Ayah menatap kertasku. Lama.\n\n"
-            "Ibu meletakkan tehnya. \"Kenji...\"\n\n"
-            "Ayah mengambil kertasku. Membaca dua kali.\n"
-            "Lalu ia mengambil pena dari sakunya.\n"
-            "Dan menandatangani di bawah tulisanku.\n\n"
-            "Satu tanda tangan kecil yang rasanya lebih besar\n"
-            "dari semua kata-kata yang pernah tidak terucapkan di antara mereka.\n\n"
-            "---\n\n"
-            "Enam bulan kemudian, channel Haru punya 8.700 subscriber.\n"
-            "Nilai rata-rata Haru: 87.\n\n"
-            "Di video terbaru Haru — judulnya 'Perjanjian dengan Ayah' —\n"
-            "ada komentar dari akun tanpa foto profil:\n"
-            "\"Semangat. - Ayah\"\n\n"
-            "Haru tidak membalas komentar itu.\n"
-            "Tapi ia screenshot dan menjadikannya wallpaper.\n\n"
-            "---\n\n"
-            "Dunia ini memudar.\n"
-            "Aku — Ren — membuka mata di tempat yang familiar:\n"
-            "jalanan. Sore. Kantong plastik manga di tangan.\n\n"
-            "Tidak ada truk kali ini.\n\n"
-            "Aku berjalan pulang. Dan mungkin besok,\n"
-            "aku akan mencari manga itu lagi — judulnya apa ya...\n\n"
-            "                    [ ENDING 3 — SELESAI ]\n"
-            "         \"Kompromi bukan berarti kalah —\n"
-            "          kadang itu cara paling elegan untuk menang bersama.\"\n";
-        s.dialogs = {};
+    // Insert ke active list (CRUD: Tambah)
+    for (int i = 0; i < pickCount; i++) {
+        activeList.insertNode(pool[indices[i]]);
     }
 }
 
 // ============================================================
-// SCENE LOOKUP (Graph traversal by ID)
+// DISPLAY CHAPTER HEADER
 // ============================================================
 
-Scene* findScene(int id) {
-    for (int i = 0; i < sceneCount; i++) {
-        if (scenes[i].id == id) return &scenes[i];
-    }
-    return nullptr;
-}
-
-// ============================================================
-// CHAPTER LIST BUILDER
-// ============================================================
-
-void buildChapterList(ChapterList& cl) {
-    cl.append(0,  "Prolog: Dunia yang Kulupa");
-    cl.append(1,  "Chapter 1: Pagi di Keluarga Mizushima");
-    cl.append(2,  "Chapter 2: Meja Makan");
-    cl.append(3,  "Chapter 3: Sepulang Sekolah");
-    cl.append(4,  "Chapter 4: Kamar dan Rahasia");
-    cl.append(5,  "Chapter 5: Suara di Balik Pintu");
-    cl.append(6,  "Chapter 6: Pagi yang Berbeda");
-    cl.append(7,  "Chapter 7: Persimpangan");
-}
-
-// ============================================================
-// DISPLAY SCENE
-// ============================================================
-
-void displayScene(Scene* s, bool skipProlog, int resetCount) {
+void displayChapterHeader(ChapterNode* cn, int points) {
     printSeparator();
-    cout << "  " << s->title << "\n";
+    cout << "\n  " << cn->title << "\n";
+    cout << "  Setting: " << cn->setting << "\n";
+    printLine();
+    cout << "  Poin Keberhasilan: " << points << " / " << WIN_POINT << "\n";
     printSeparator();
-
-    // Skip prolog narration (but not on first run, and not for chapter 0)
-    if (skipProlog && s->id == 0 && resetCount == 0) {
-        // first time — show full
-    }
-
-    // Show narration
-    if (!s->narration.empty()) {
-        cout << "\n" << s->narration << "\n";
-    }
-
-    // Show dialogs via Queue
-    if (!s->dialogs.empty()) {
-        printLine();
-        displayDialogQueue(s->dialogs);
-        printLine();
-    }
 }
 
 // ============================================================
-// DISPLAY CHOICES
+// DISPLAY POIN BAR
 // ============================================================
 
-int displayChoices(Scene* s) {
-    if (s->choiceCount == 0) return 0;
-
-    cout << "\n--- Pilih Tindakanmu ---\n";
-    for (int i = 0; i < s->choiceCount; i++) {
-        cout << "  " << (i + 1) << ". " << s->choices[i].text << "\n";
-    }
-    return getChoice(s->choiceCount);
+void displayPointBar(int points) {
+    cout << "\n  [Poin: " << points << "/100]  ";
+    int filled = max(0, min(points, 100)) / 5;
+    cout << "[";
+    for (int i = 0; i < 20; i++) cout << (i < filled ? "#" : "-");
+    cout << "]\n";
 }
 
 // ============================================================
-// DISPLAY RESET
+// PLAY SINGLE EVENT
 // ============================================================
+// Mengembalikan perubahan poin
 
-void displayReset(int resetCount) {
+int playEvent(Event* ev, int currentPoints) {
     printSeparator();
-    cout << "\n  ...waktu berhenti.\n\n";
-    cout << "  Dunia di sekitarmu retak seperti kaca.\n";
-    cout << "  Dan kemudian semuanya ditarik kembali —\n";
-    cout << "  ke titik di mana semuanya dimulai.\n";
-    printSeparator();
+    cout << "\n  === " << ev->title << " ===\n\n";
+    cout << "  " << ev->narration << "\n";
+    printLine();
+
+    // Tampilkan pilihan
+    cout << "\n  Apa yang kamu lakukan?\n\n";
+    for (int i = 0; i < ev->choiceCount; i++) {
+        cout << "  [" << (i + 1) << "] " << ev->choices[i].text << "\n";
+    }
+
+    int pick = getInput(ev->choiceCount);
+    Choice& chosen = ev->choices[pick - 1];
+
+    // CRUD: Ubah — update poin
+    int newPoints = currentPoints + chosen.pointDelta;
+
+    printLine();
+    if (chosen.pointDelta > 0) {
+        cout << "\n  + " << chosen.pointDelta << " poin! ("
+             << currentPoints << " -> " << newPoints << ")\n";
+    } else if (chosen.pointDelta < 0) {
+        cout << "\n  " << chosen.pointDelta << " poin. ("
+             << currentPoints << " -> " << newPoints << ")\n";
+    } else {
+        cout << "\n  Poin tidak berubah. (" << currentPoints << ")\n";
+    }
 
     pressEnter();
+    return chosen.pointDelta;
+}
 
+// ============================================================
+// DISPLAY RESTART
+// ============================================================
+
+void displayRestart(int restartCount) {
     printSeparator();
-    cout << "\n  [ RESET #" << resetCount << " ]\n\n";
-
-    // Get monolog based on reset count
-    int idx = (resetCount - 1);
-    if (idx >= RESET_MONOLOG_COUNT) idx = RESET_MONOLOG_COUNT - 1;
-    cout << resetMonologs[idx] << "\n";
+    cout << "\n  ...waktu berhenti.\n";
+    cout << "  Dunia di sekitarmu retak seperti kaca.\n";
+    cout << "  Semuanya ditarik kembali — ke awal.\n";
     printSeparator();
+    pressEnter();
 
+    cout << "\n  [ RESTART #" << restartCount << " ]\n";
+
+    int idx = min(restartCount - 1, MONOLOG_COUNT - 1);
+    vector<string> lines;
+    // Split monolog per baris untuk ditampilkan via Queue
+    string monolog = restartMonologs[idx];
+    string line;
+    for (char c : monolog) {
+        if (c == '\n') {
+            lines.push_back(line);
+            line.clear();
+        } else {
+            line += c;
+        }
+    }
+    if (!line.empty()) lines.push_back(line);
+
+    // Queue display
+    displayMonologQueue(lines);
     pressEnter();
 }
 
@@ -780,32 +786,152 @@ void displayReset(int resetCount) {
 // DISPLAY ENDING
 // ============================================================
 
-void displayEnding(Scene* s) {
+void displayEnding(int totalRestarts) {
     printSeparator();
-    cout << "\n  " << s->title << "\n";
+    cout << "\n";
+    cout << "  ENDING: Perjanjian dengan Ayah\n";
     printSeparator();
-    cout << "\n" << s->narration << "\n";
+    cout << "\n"
+         << "  \"Aku punya usul, Ayah.\"\n\n"
+         << "  Kamu membuka halaman baru di buku catatan.\n"
+         << "  Menulis dua kolom: AKADEMIK dan KONTEN.\n\n"
+         << "  \"Nilai rata-rata di atas 85 — itu janjiku.\n"
+         << "   Sebagai gantinya, aku minta dua jam setiap Jumat dan Sabtu.\n"
+         << "   Kalau nilaiku turun, aku sendiri yang akan berhenti.\"\n\n"
+         << "  Ayah mengambil kertas itu. Membaca dua kali.\n"
+         << "  Lalu ia mengambil pena dari sakunya.\n"
+         << "  Dan menandatanganinya.\n\n"
+         << "  Satu tanda tangan kecil yang rasanya lebih besar\n"
+         << "  dari semua kata yang pernah tidak terucapkan di antara mereka.\n\n";
+    printLine();
+    cout << "\n"
+         << "  Enam bulan kemudian:\n"
+         << "  Channel Haru: 8.700 subscriber.\n"
+         << "  Nilai rata-rata Haru: 87.\n\n"
+         << "  Di video terbaru, ada komentar dari akun tanpa foto profil:\n"
+         << "  \"Semangat. - Ayah\"\n\n"
+         << "  Haru tidak membalas.\n"
+         << "  Tapi ia screenshot dan menjadikannya wallpaper.\n\n";
     printSeparator();
-    cout << "\n  Terima kasih sudah memainkan MANGA RESET: Dunia yang Kulupa.\n\n";
+    cout << "\n"
+         << "              [ ENDING — SELESAI ]\n\n"
+         << "   \"Kompromi bukan berarti kalah —\n"
+         << "    kadang itu cara paling elegan untuk menang bersama.\"\n\n";
+    printSeparator();
+    cout << "\n  Total restart: " << totalRestarts << " kali.\n";
+    cout << "  Terima kasih sudah memainkan MANGA RESET.\n\n";
 }
 
 // ============================================================
-// MAIN GAME LOOP
+// PLAY CHAPTER
+// ============================================================
+// Return: true = lanjut ke chapter berikutnya, false = game selesai
+
+bool playChapter(int chapterId, Event* pool, GameState& gs, StateStack& stateStack) {
+    ChapterNode* cn = findChapterNode(chapterId);
+    if (!cn) return false;
+
+    // Save state awal chapter
+    gs.points = STARTING_POINT;
+    gs.currentChapter = chapterId;
+    stateStack.clear();
+    stateStack.save(gs);
+
+    while (true) {
+        // Buat sesi baru: random pick event
+        ActiveEventList activeList;
+        randomPickEvents(pool, POOL_SIZE, MIN_EVENTS, MAX_EVENTS, activeList);
+
+        displayChapterHeader(cn, gs.points);
+        cout << "\n  " << activeList.count << " aktivitas tersedia sesi ini.\n";
+        pressEnter();
+
+        // Loop sesi: player pilih event satu per satu
+        while (!activeList.isEmpty()) {
+            clearScreen();
+            displayChapterHeader(cn, gs.points);
+            displayPointBar(gs.points);
+
+            // CRUD: Tampilkan — render menu event aktif
+            activeList.displayMenu();
+
+            // Tambahkan opsi lihat karakter
+            cout << "  [" << (activeList.count + 1) << "] Lihat daftar karakter\n";
+            printLine();
+
+            int menuChoice = getInput(activeList.count + 1);
+
+            // Opsi lihat karakter
+            if (menuChoice == activeList.count + 1) {
+                printSeparator();
+                cout << "\n  --- Karakter dalam Cerita ---\n\n";
+                for (const auto& ch : characters) {
+                    cout << "  " << ch.name << " (" << ch.role << ")\n";
+                    cout << "  " << ch.description << "\n\n";
+                }
+                pressEnter();
+                continue;
+            }
+
+            // Ambil event yang dipilih
+            Event* selectedEvent = activeList.getByMenuIndex(menuChoice);
+            if (!selectedEvent) continue;
+
+            int eventId = selectedEvent->id;
+
+            // Main event — CRUD: Ubah (poin berubah)
+            int delta = playEvent(selectedEvent, gs.points);
+            gs.points += delta;
+
+            // CRUD: Hapus — hapus event dari linked list setelah selesai
+            activeList.deleteNode(eventId);
+
+            // Cek poin
+            if (gs.points >= WIN_POINT) {
+                cout << "\n  Poin mencapai " << gs.points
+                     << "! Kamu berhasil melewati chapter ini!\n";
+                pressEnter();
+                return true;   // lanjut ke chapter berikutnya
+            }
+            if (gs.points <= 0) {
+                gs.restartCount++;
+                displayRestart(gs.restartCount);
+                // Restore ke awal chapter
+                int savedRestarts = gs.restartCount;
+                gs = stateStack.getChapterInitial();
+                gs.restartCount = savedRestarts;
+                gs.points = STARTING_POINT;
+                stateStack.save(gs);
+                // Mulai sesi baru (break inner loop)
+                break;
+            }
+        }
+
+        // Semua event habis tapi poin masih 1-99: sesi baru
+        if (gs.points > 0 && gs.points < WIN_POINT) {
+            cout << "\n  Semua aktivitas selesai. Poin: " << gs.points << "\n";
+            cout << "  Belum cukup untuk lanjut. Sesi baru dimulai...\n";
+            pressEnter();
+            // Loop while(true) akan membuat sesi baru dengan random event berbeda
+        }
+    }
+}
+
+// ============================================================
+// MAIN
 // ============================================================
 
 int main() {
-    buildSceneDatabase();
+    srand(static_cast<unsigned>(time(nullptr)));
 
-    ChapterList  chapterList;
-    buildChapterList(chapterList);
+    // Build semua data
+    buildChapterGraph();
+    buildPoolChapter1();
+    buildPoolChapter2();
 
-    DialogHistory history;
-    StateStack    stateStack;
-
-    // Initial game state
-    GameState initialState = {0, 0, false, false};
-    GameState gs           = initialState;
-    stateStack.save(gs);
+    // Init game state
+    GameState gs = {1, STARTING_POINT, 0, false, false};
+    StateStack stateStack;
 
     // ── Title Screen ─────────────────────────────────────────
     printSeparator();
@@ -813,85 +939,60 @@ int main() {
     cout << "        MANGA RESET: Dunia yang Kulupa\n";
     cout << "\n";
     cout << "  Sebuah cerita tentang pilihan, keluarga, dan impian.\n";
-    cout << "  Temukan satu-satunya jalur yang benar.\n";
-    cout << "  Salah pilih — kamu kembali ke awal.\n";
+    cout << "  Kumpulkan 100 poin di setiap chapter untuk melanjutkan.\n";
+    cout << "  Poin habis — kamu kembali ke awal chapter.\n";
     cout << "\n";
     printSeparator();
-
     pressEnter();
 
-    // ── Game Loop ─────────────────────────────────────────────
-    while (!gs.gameOver) {
-        Scene* current = findScene(gs.currentSceneId);
-        if (!current) {
-            cout << "Error: Scene tidak ditemukan.\n";
+    // ── Prolog ───────────────────────────────────────────────
+    printSeparator();
+    cout << "\n  Prolog\n";
+    printSeparator();
+    cout << "\n"
+         << "  Namaku Ren. 18 tahun. Otaku.\n\n"
+         << "  Hari itu biasa saja — pulang dari toko manga,\n"
+         << "  kantong plastik di tangan, langit sore berwarna oranye.\n\n"
+         << "  Dan kemudian... truk.\n\n"
+         << "  Aku tidak sempat berteriak.\n\n"
+         << "  ---\n\n"
+         << "  Saat mataku terbuka, ini bukan kamarku.\n"
+         << "  Ada poster jadwal pelajaran. Meja belajar penuh buku.\n"
+         << "  Satu laptop tua yang sengaja disembunyikan di balik binder.\n\n"
+         << "  Di cermin di depanku... bukan wajahku.\n\n"
+         << "  \"Ini... Haru?\"\n\n"
+         << "  Haru Mizushima. MC dari sebuah manga slice of life\n"
+         << "  yang aku baca sekitar 5 tahun lalu.\n\n"
+         << "  Hidupnya keras. Keluarganya keras.\n"
+         << "  Dan ada cerita yang harus kujalani.\n\n"
+         << "  Semoga aku ingat cukup banyak untuk tidak merusaknya.\n\n";
+    pressEnter();
+
+    // ── Game Loop — Graph traversal ──────────────────────────
+    // Mulai dari node Chapter 1 di graph
+    int currentChapterId = 1;
+
+    while (true) {
+        ChapterNode* cn = findChapterNode(currentChapterId);
+        if (!cn) break;
+
+        // Ending node
+        if (currentChapterId == 99) {
+            displayEnding(gs.restartCount);
             break;
         }
 
-        // Display scene
-        displayScene(current, false, gs.resetCount);
+        // Pilih pool yang sesuai
+        Event* pool = (currentChapterId == 1) ? poolChapter1 : poolChapter2;
 
-        // Ending check
-        if (current->isEnding) {
-            displayEnding(current);
-            gs.gameOver    = true;
-            gs.reachedEnding = true;
-            break;
-        }
+        bool won = playChapter(currentChapterId, pool, gs, stateStack);
 
-        // Prolog: no choice, just continue
-        if (current->choiceCount == 0) {
-            pressEnter();
-            gs.currentSceneId = 1;
-            stateStack.save(gs);
-            continue;
-        }
-
-        // Show progress for non-prolog scenes
-        if (current->id > 0 && current->id < 10) {
-            chapterList.printProgress(current->id);
-        }
-
-        // Get player choice
-        int pick = displayChoices(current);
-        Choice& chosen = current->choices[pick - 1];
-
-        // Record in history
-        string histEntry = "[Scene " + to_string(current->id) + "] " + chosen.text;
-        history.push(histEntry);
-
-        if (chosen.nextSceneId == -1 || !chosen.isCorrect) {
-            // Wrong choice — reset
-            gs.resetCount++;
-            displayReset(gs.resetCount);
-
-            // Restore to initial state
-            gs = initialState;
-            gs.resetCount = stateStack.getInitial().resetCount; 
-            // Actually keep current reset count
-            int savedReset = gs.resetCount;
-            gs = initialState;
-            gs.resetCount = savedReset + 1;
-            // Re-save
-            stateStack.save(gs);
-
-        } else {
-            // Correct — advance
-            gs.currentSceneId = chosen.nextSceneId;
-            stateStack.save(gs);
+        if (won) {
+            // Traversal graph: pindah ke node berikutnya
+            currentChapterId = cn->nextChapterId;
         }
     }
 
-    // ── Post-game ─────────────────────────────────────────────
-    if (gs.reachedEnding) {
-        cout << "\n  Total reset yang dialami: " << gs.resetCount << " kali.\n\n";
-        if (gs.resetCount > 0) {
-            cout << "  Pilihanmu selama perjalanan:\n";
-            history.printAll();
-        }
-    }
-
-    cout << "\n";
     printSeparator();
     cout << "  [ Program selesai. ]\n";
     printSeparator();
