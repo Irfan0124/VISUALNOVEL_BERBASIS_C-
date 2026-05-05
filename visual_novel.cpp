@@ -51,6 +51,7 @@ const int WIN_POINT      = 100;
 struct Choice {
     string text;
     int    pointDelta;   // poin yang berubah saat pilihan ini dipilih
+    string response;     // narasi yang muncul setelah pilihan dipilih
 };
 
 // Struct: satu event / aktivitas yang bisa dipilih player
@@ -283,9 +284,23 @@ void buildPoolChapter1() {
         "  Di pojok kertas: 'Terlambat = tidak ada uang jajan seminggu.'\n\n"
         "  Kamu menatap jadwal itu. Masih ngantuk.",
         {
-            {"Langsung bangun dan mulai lari sesuai jadwal.", +25},
-            {"Tidur lagi 15 menit, lari bisa nanti.", -20},
-            {"Lari di tempat saja di kamar — lebih praktis.", +5},
+            {
+                "Langsung bangun dan mulai lari sesuai jadwal.", +25,
+                "Kamu lempar selimut dan turun dari kasur. Dingin, tapi kaki ini\n"
+                "  bergerak juga. Lari pagi selesai tepat waktu — dan entah kenapa,\n"
+                "  pagi ini terasa lebih ringan dari biasanya."
+            },
+            {
+                "Tidur lagi 15 menit, lari bisa nanti.", -20,
+                "Lima belas menit jadi tiga puluh. Tiga puluh jadi empat puluh lima.\n"
+                "  Kamu bangun dengan panik — jadwal Ayah sudah terlewat, dan ada\n"
+                "  rasa bersalah yang menempel sepanjang pagi."
+            },
+            {
+                "Lari di tempat saja di kamar — lebih praktis.", +5,
+                "Kamu lari di tempat sambil lirik-lirik cermin. Lumayan. Tidak ideal.\n"
+                "  Tapi setidaknya tubuhmu bergerak, dan hati nuranimu tidak terlalu berisik."
+            },
         }, 3
     };
 
@@ -296,10 +311,29 @@ void buildPoolChapter1() {
         "  \"Haru. Nilai ulangan matematika minggu lalu.\"\n"
         "  Bukan pertanyaan. Pernyataan. Ia sudah tahu nilaimu: 78.",
         {
-            {"Jawab jujur: \"78, Ayah. Aku akan lebih giat.\"", +25},
-            {"Diam saja dan terus makan.", -15},
-            {"Berbohong: \"Sudah bagus, di atas rata-rata kelas.\"", -20},
-            {"Alihkan topik: \"Ibu, masakannya enak hari ini.\"", -10},
+            {
+                "Jawab jujur: \"78, Ayah. Aku akan lebih giat.\"", +25,
+                "Ayah diam sejenak. Lalu ia mengangguk pelan.\n"
+                "  Tidak ada pujian — tapi tidak ada ceramah juga. Itu sudah cukup."
+            },
+            {
+                "Diam saja dan terus makan.", -15,
+                "Keheningan di meja makan terasa sangat berat.\n"
+                "  Ayah akhirnya menaruh koran dan berdiri tanpa berkata apa-apa.\n"
+                "  Kamu tahu artinya."
+            },
+            {
+                "Berbohong: \"Sudah bagus, di atas rata-rata kelas.\"", -20,
+                "Ayah menatapmu dengan tatapan yang kamu kenal —\n"
+                "  tatapan 'aku sudah tahu'. Ia membuka koran lagi.\n"
+                "  'Bicara yang benar, Haru.'"
+            },
+            {
+                "Alihkan topik: \"Ibu, masakannya enak hari ini.\"", -10,
+                "Ibu tersenyum kecil. Tapi Ayah tidak bergeming.\n"
+                "  Ia hanya menatapmu sekali lagi sebelum balik ke korannya.\n"
+                "  Topiknya menggantung di udara."
+            },
         }, 4
     };
 
@@ -312,10 +346,27 @@ void buildPoolChapter1() {
         "   Jangan bikin masalah dulu, ya.\"\n\n"
         "  Kamu menatapnya.",
         {
-            {"Angguk dan bilang: \"Iya, Kak. Makasih info-nya.\"", +20},
-            {"Balik ke kamar tanpa menjawab.", -10},
-            {"Tanya balik: \"Emang kenapa, Kak? Cerita dong.\"", +15},
-            {"Senyum saja tanpa berkata apa-apa.", +5},
+            {
+                "Angguk dan bilang: \"Iya, Kak. Makasih info-nya.\"", +20,
+                "Hana menepuk bahumu pelan. 'Bagus.'\n"
+                "  Hanya satu kata — tapi dari Hana, itu banyak."
+            },
+            {
+                "Balik ke kamar tanpa menjawab.", -10,
+                "Hana memanggil namamu sekali, tapi kamu sudah di ujung lorong.\n"
+                "  Kamu dengar helaan napasnya dari dapur."
+            },
+            {
+                "Tanya balik: \"Emang kenapa, Kak? Cerita dong.\"", +15,
+                "Hana sedikit kaget. Lalu ia duduk dan cerita sebentar\n"
+                "  soal Ayah yang sedang stres proyek. Kamu menyimak.\n"
+                "  Setidaknya sekarang kamu lebih paham situasinya."
+            },
+            {
+                "Senyum saja tanpa berkata apa-apa.", +5,
+                "Hana menatapmu sebentar, lalu balik menatap gelasnya.\n"
+                "  'Ya sudah. Hati-hati.' Singkat, tapi hangatnya ada."
+            },
         }, 4
     };
 
@@ -327,10 +378,30 @@ void buildPoolChapter1() {
         "  Judulnya: 'Cara Aku Mulai dari 0 Subscriber'\n\n"
         "  Ayah ada di ruang sebelah. Waktu 10 menit sebelum berangkat.",
         {
-            {"Tonton sebentar — 10 menit cukup untuk highlight-nya.", +15},
-            {"Simpan dulu untuk nonton nanti, sekarang fokus berangkat.", +20},
-            {"Langsung balas komentar di videonya.", -10},
-            {"Tutup HP dan lupakan.", -5},
+            {
+                "Tonton sebentar — 10 menit cukup untuk highlight-nya.", +15,
+                "Kamu tonton highlight-nya. Ada satu kalimat yang Kaito bilang\n"
+                "  yang langsung kamu catat di memo: 'Konsistensi mengalahkan\n"
+                "  konten sempurna.' Itu sudah cukup untuk hari ini."
+            },
+            {
+                "Simpan dulu untuk nonton nanti, sekarang fokus berangkat.", +20,
+                "Kamu taruh HP ke saku dan berangkat. Tapi pikiran soal video itu\n"
+                "  menempel sepanjang perjalanan — dan itu bukan hal yang buruk.\n"
+                "  Ide-ide kecil mulai berkecambah di kepala."
+            },
+            {
+                "Langsung balas komentar di videonya.", -10,
+                "Kamu tulis komentar panjang lebar. Tiba-tiba Ayah muncul di pintu.\n"
+                "  'Berangkat.' Kamu panik, tutup HP, dan buru-buru keluar.\n"
+                "  Konsentrasimu sudah buyar sebelum hari dimulai."
+            },
+            {
+                "Tutup HP dan lupakan.", -5,
+                "Kamu tutup HP. Benar secara keputusan — tapi ada sedikit\n"
+                "  rasa menyesal yang menggantung. Mungkin itu informasi\n"
+                "  yang kamu butuhkan hari ini."
+            },
         }, 4
     };
 
@@ -342,10 +413,29 @@ void buildPoolChapter1() {
         "  Ia menempelkan kertas itu di lemari.\n\n"
         "  Itu artinya kamu tidak bisa rekam konten malam hari.",
         {
-            {"\"Baik, Ayah.\" — Terima tanpa komplain.", +20},
-            {"\"Tapi Ayah, aku sudah punya jadwal sendiri—\" (potong di tengah)", -20},
-            {"Diam, tapi sudah mulai berpikir cara menyiasatinya.", +10},
-            {"\"Boleh aku belajar sendiri caranya, Ayah?\"", +15},
+            {
+                "\"Baik, Ayah.\" — Terima tanpa komplain.", +20,
+                "Ayah mengangguk. Perang kecil ini tidak terjadi —\n"
+                "  setidaknya untuk hari ini. Kamu menarik napas\n"
+                "  dan mulai berpikir bagaimana cara menyiasatinya."
+            },
+            {
+                "\"Tapi Ayah, aku sudah punya jadwal sendiri—\" (potong di tengah)", -20,
+                "Ayah memotong kalimatmu dengan satu tatapan.\n"
+                "  Malam itu terasa sangat, sangat panjang."
+            },
+            {
+                "Diam, tapi sudah mulai berpikir cara menyiasatinya.", +10,
+                "Kamu diam. Tapi otakmu sudah berputar —\n"
+                "  jam 6 pagi sebelum semua orang bangun, mungkin?\n"
+                "  Ada celah. Selalu ada celah kalau mau dicari."
+            },
+            {
+                "\"Boleh aku belajar sendiri caranya, Ayah?\"", +15,
+                "Ayah sedikit terkejut dengan pertanyaan itu. Ia diam sebentar.\n"
+                "  'Kalau nilaimu bagus, kita bisa bicara soal metode.'\n"
+                "  Itu bukan penolakan — itu negosiasi terselubung."
+            },
         }, 4
     };
 
@@ -356,10 +446,30 @@ void buildPoolChapter1() {
         "  Kamu bisa langsung pergi ke kamar,\n"
         "  atau sebentar bantu.",
         {
-            {"Langsung tawarkan diri bantu cuci piring.", +25},
-            {"Bilang mau bantu tapi malah cuma berdiri.", +5},
-            {"Langsung ke kamar — ada yang ingin dikerjakan.", -5},
-            {"Tanya Ibu soal Ayah: \"Ibu, Ayah kenapa akhir-akhir ini...\"", +15},
+            {
+                "Langsung tawarkan diri bantu cuci piring.", +25,
+                "Ibu tersenyum — senyum yang berbeda dari biasanya.\n"
+                "  Bukan senyum basa-basi. Senyum yang bilang 'terima kasih\n"
+                "  sudah memperhatikan'. Kalian cuci piring dalam diam yang hangat."
+            },
+            {
+                "Bilang mau bantu tapi malah cuma berdiri.", +5,
+                "Kamu akhirnya bantu juga, meski canggung.\n"
+                "  Ibu tidak berkomentar. Tapi ia tidak mengusirmu juga."
+            },
+            {
+                "Langsung ke kamar — ada yang ingin dikerjakan.", -5,
+                "Kamu masuk kamar. Di balik pintu, kamu dengar bunyi piring\n"
+                "  yang terus bergerak — dan suara itu entah kenapa\n"
+                "  terasa lebih berat dari biasanya."
+            },
+            {
+                "Tanya Ibu soal Ayah: \"Ibu, Ayah kenapa akhir-akhir ini...\"", +15,
+                "Ibu menaruh piring dan menatapmu. Lalu ia bercerita pelan —\n"
+                "  tentang Ayah, tentang tekanan kerja, tentang bagaimana\n"
+                "  rumah ini sedang dalam mode 'tahan napas'.\n"
+                "  Kamu menyimap setiap kata."
+            },
         }, 4
     };
 
@@ -371,11 +481,36 @@ void buildPoolChapter1() {
         "  Ada draft video yang belum diupload.\n"
         "  Suara rumah sudah mulai sepi.",
         {
-            {"Edit draft video dengan teliti, tapi jangan upload dulu.", +20},
-            {"Upload langsung tanpa diedit.", -15},
-            {"Tutup laptop — terlalu berisiko sekarang.", +5},
-            {"Rekam video baru dengan berbisik pelan.", +25},
-            {"Buka komentar lama dan baca satu per satu.", +10},
+            {
+                "Edit draft video dengan teliti, tapi jangan upload dulu.", +20,
+                "Kamu edit dengan teliti — potong bagian yang terlalu lama,\n"
+                "  perbaiki audio. Hasilnya jauh lebih baik dari semula.\n"
+                "  Kamu simpan dan tutup laptop dengan rasa puas yang jarang kamu rasakan."
+            },
+            {
+                "Upload langsung tanpa diedit.", -15,
+                "Video terupload dalam kondisi mentah. Satu jam kemudian\n"
+                "  kamu lihat komentar pertama: 'audio-nya berisik banget.'\n"
+                "  Kamu gigit bibir. Terlambat untuk ditarik."
+            },
+            {
+                "Tutup laptop — terlalu berisiko sekarang.", +5,
+                "Kamu tutup laptop. Bukan karena menyerah —\n"
+                "  karena kamu memilih momen yang lebih tepat.\n"
+                "  Itu keputusan yang lebih dewasa dari yang kamu sadari."
+            },
+            {
+                "Rekam video baru dengan berbisik pelan.", +25,
+                "Berbisik ke kamera, kamu rekam. Justru karena terbata dan pelan,\n"
+                "  videonya terasa lebih intim, lebih nyata.\n"
+                "  'Ini yang terbaik yang pernah aku buat,' bisikmu ke diri sendiri."
+            },
+            {
+                "Buka komentar lama dan baca satu per satu.", +10,
+                "Kamu baca komentar-komentar lama — ada yang singkat, ada yang panjang.\n"
+                "  Satu komentar dari enam bulan lalu:\n"
+                "  'kontenmu polos tapi mengena.' Kamu senyum sendiri."
+            },
         }, 5
     };
 
@@ -387,10 +522,30 @@ void buildPoolChapter1() {
         "   Nisa juga ikut. Santai aja, paling sejam.\"\n\n"
         "  Ayah ada di rumah.",
         {
-            {"Tolak dengan sopan: \"Nggak bisa hari ini, Dit.\"", +20},
-            {"Langsung iya tanpa pikir panjang.", -25},
-            {"Minta waktu dua jam lagi, baru keluar.", -10},
-            {"Tanya dulu ke Ibu apakah boleh keluar.", +15},
+            {
+                "Tolak dengan sopan: \"Nggak bisa hari ini, Dit.\"", +20,
+                "Dito bilang 'ya sudah' dengan nada biasa —\n"
+                "  tidak kecewa, tidak marah. Dan kamu lega.\n"
+                "  Sore ini masih milikmu."
+            },
+            {
+                "Langsung iya tanpa pikir panjang.", -25,
+                "Kamu keluar. Sejam jadi dua jam. Saat pulang,\n"
+                "  Ayah sudah berdiri di depan pintu.\n"
+                "  Kamu tidak perlu melihat ekspresinya untuk tahu."
+            },
+            {
+                "Minta waktu dua jam lagi, baru keluar.", -10,
+                "Dua jam kemudian kamu bergabung —\n"
+                "  tapi pikiran soal Ayah tidak pergi.\n"
+                "  Kamu tidak bisa menikmati satu pun momen di sana."
+            },
+            {
+                "Tanya dulu ke Ibu apakah boleh keluar.", +15,
+                "Ibu mempertimbangkan sebentar. 'Sejam saja.'\n"
+                "  Kamu mengangguk. Dan kali ini, perginya terasa ringan\n"
+                "  karena izin sudah di tangan."
+            },
         }, 4
     };
 
@@ -401,10 +556,30 @@ void buildPoolChapter1() {
         "  Di mejamu: buku matematika dan laptop tersembunyi.\n"
         "  Kamu hanya bisa pilih satu.",
         {
-            {"Belajar matematika dulu — nilai 78 harus naik.", +20},
-            {"Buka laptop — satu jam cukup untuk rekam intro video.", +15},
-            {"Tiduran sambil scroll HP.", -20},
-            {"Belajar setengah jam, sisanya buat catatan ide konten.", +25},
+            {
+                "Belajar matematika dulu — nilai 78 harus naik.", +20,
+                "Kamu buka bab persamaan kuadrat dan mulai dari soal pertama.\n"
+                "  Tiga puluh menit kemudian, ada sesuatu yang mulai masuk akal.\n"
+                "  Nilai 78 mungkin bukan takdir."
+            },
+            {
+                "Buka laptop — satu jam cukup untuk rekam intro video.", +15,
+                "Kamu rekam intro — singkat, tapi kamu puas.\n"
+                "  Sebelum tidur, kamu putar ulang sekali.\n"
+                "  'Ini cukup bagus,' bisikmu dalam gelap."
+            },
+            {
+                "Tiduran sambil scroll HP.", -20,
+                "HP, scroll, HP, scroll. Tiba-tiba jam 22.30.\n"
+                "  Dan kamu belum mengerjakan apa-apa.\n"
+                "  Hati kecilmu berbisik bahwa ini bukan keputusan terbaik."
+            },
+            {
+                "Belajar setengah jam, sisanya buat catatan ide konten.", +25,
+                "Tiga puluh menit belajar, tiga puluh menit nulis ide konten.\n"
+                "  Waktu habis, tapi kamu tidur dengan perasaan\n"
+                "  bahwa hari ini tidak sia-sia."
+            },
         }, 4
     };
 
@@ -417,10 +592,30 @@ void buildPoolChapter1() {
         "  yang sedang kamu jalani — sebagai dirinya.\n\n"
         "  Kamu bicara ke cermin.",
         {
-            {"\"Aku bisa. Haru pasti bisa.\" — Ucapkan dengan yakin.", +25},
-            {"Diam saja dan pergi.", 0},
-            {"\"Kenapa hidup ini harus sekeras ini?\" — Keluh.", -10},
-            {"Latihan senyum untuk kamera video.", +15},
+            {
+                "\"Aku bisa. Haru pasti bisa.\" — Ucapkan dengan yakin.", +25,
+                "Suaramu gemetar sedikit di awal — tapi makin lama makin kuat.\n"
+                "  Kamu menatap wajah Haru di cermin dan untuk pertama kali,\n"
+                "  kamu percaya bahwa ia benar-benar bisa."
+            },
+            {
+                "Diam saja dan pergi.", 0,
+                "Kamu pergi tanpa berkata apa-apa.\n"
+                "  Tapi bayangan di cermin itu tidak ikut pergi dari pikiranmu\n"
+                "  sepanjang hari."
+            },
+            {
+                "\"Kenapa hidup ini harus sekeras ini?\" — Keluh.", -10,
+                "Kata-kata itu keluar begitu saja.\n"
+                "  Dan entah kenapa, setelah diucapkan,\n"
+                "  bebannya tidak berkurang — malah sedikit bertambah."
+            },
+            {
+                "Latihan senyum untuk kamera video.", +15,
+                "Kamu latihan senyum tiga kali. Yang terakhir terasa paling alami.\n"
+                "  Kamu simpan ekspresi itu di memori —\n"
+                "  mungkin berguna untuk kamera nanti."
+            },
         }, 4
     };
 }
@@ -440,10 +635,30 @@ void buildPoolChapter2() {
         "  \"Ulangan mendadak. Materi dua minggu terakhir.\"\n"
         "  Kelas langsung riuh. Kamu belum review sama sekali.",
         {
-            {"Tetap tenang — kerjakan semampu yang diingat.", +20},
-            {"Coba lirik jawaban Nisa yang duduk di sebelah.", -25},
-            {"Kosongin yang tidak tahu, fokus yang bisa dikerjakan.", +15},
-            {"Minta izin ke toilet untuk buka catatan HP.", -20},
+            {
+                "Tetap tenang — kerjakan semampu yang diingat.", +20,
+                "Kamu tulis apa yang kamu ingat — beberapa kosong, tapi banyak terisi.\n"
+                "  Saat kertas dikumpulkan, kamu tidak merasa hancur.\n"
+                "  Itu sudah lebih dari cukup untuk kondisi tidak siap."
+            },
+            {
+                "Coba lirik jawaban Nisa yang duduk di sebelah.", -25,
+                "Nisa sadar dan menutupi kertasnya. Guru melirik.\n"
+                "  Kamu pura-pura batuk. Jantungmu berdegup\n"
+                "  sampai bel berbunyi — dan hasilnya tetap tidak memuaskan."
+            },
+            {
+                "Kosongin yang tidak tahu, fokus yang bisa dikerjakan.", +15,
+                "Strategi yang baik. Kamu tidak buang waktu di soal yang buntu —\n"
+                "  fokus ke yang bisa, dan hasilnya lumayan\n"
+                "  untuk kondisi tidak siap sama sekali."
+            },
+            {
+                "Minta izin ke toilet untuk buka catatan HP.", -20,
+                "Guru melihatmu keluar dan menatap curiga saat kamu kembali.\n"
+                "  Kamu tidak menemukan banyak — dan kecemasan itu\n"
+                "  merusak konsentrasi di sisa ulangan."
+            },
         }, 4
     };
 
@@ -455,10 +670,30 @@ void buildPoolChapter2() {
         "   channel kecil. Ini pas banget buat kamu!\"\n\n"
         "  Masih ada 20 menit istirahat.",
         {
-            {"Tonton live-nya sebentar — ini ilmu yang berguna.", +20},
-            {"Minta Nisa rekam/screenshot bagian pentingnya saja.", +15},
-            {"Ignore — fokus review pelajaran untuk jam selanjutnya.", +10},
-            {"Tonton sambil makan, tapi setengah konsentrasi.", +5},
+            {
+                "Tonton live-nya sebentar — ini ilmu yang berguna.", +20,
+                "Kamu tonton dengan serius, catat tiga poin penting di memo.\n"
+                "  Bel masuk berbunyi tepat saat Kaito mengucapkan kalimat terakhirnya.\n"
+                "  Timing yang sempurna."
+            },
+            {
+                "Minta Nisa rekam/screenshot bagian pentingnya saja.", +15,
+                "Nisa dengan senang hati screenshot beberapa slide.\n"
+                "  Kamu dapat intinya tanpa kehilangan waktu istirahat.\n"
+                "  Efisien — dan Nisa senang merasa berguna."
+            },
+            {
+                "Ignore — fokus review pelajaran untuk jam selanjutnya.", +10,
+                "Kamu buka buku dan review materi.\n"
+                "  Tidak dapat ilmu Kaito hari ini — tapi paling tidak,\n"
+                "  kamu masuk kelas berikutnya dengan lebih siap."
+            },
+            {
+                "Tonton sambil makan, tapi setengah konsentrasi.", +5,
+                "Kamu tonton sambil makan, tapi setengah perhatianmu di sana\n"
+                "  setengahnya di makanan. Kamu dapat beberapa poin,\n"
+                "  tapi tidak semuanya masuk dengan baik."
+            },
         }, 4
     };
 
@@ -470,10 +705,30 @@ void buildPoolChapter2() {
         "  Nilai Haru semester ini. Rata-rata: 76.\n"
         "  \"Kamu siswa yang cerdas. Tapi kenapa nilainya segini?\"",
         {
-            {"Jujur: \"Aku sedang cari cara seimbangkan semua hal, Bu.\"", +25},
-            {"Diam dan mengangguk saja.", -5},
-            {"Berjanji nilai akan naik tanpa penjelasan.", +10},
-            {"Alihkan: \"Saya tidak tahu, Bu. Mungkin soalnya sulit.\"", -15},
+            {
+                "Jujur: \"Aku sedang cari cara seimbangkan semua hal, Bu.\"", +25,
+                "Guru BK diam sejenak. Lalu ia tersenyum —\n"
+                "  bukan senyum kasihan, tapi senyum yang mengerti.\n"
+                "  'Kalau butuh bicara, pintu saya selalu terbuka, Haru.'"
+            },
+            {
+                "Diam dan mengangguk saja.", -5,
+                "Guru BK menghela napas. 'Kamu tidak mau cerita?'\n"
+                "  Kamu tetap diam. Sesi itu berakhir canggung\n"
+                "  dan tidak ada yang terselesaikan."
+            },
+            {
+                "Berjanji nilai akan naik tanpa penjelasan.", +10,
+                "Guru BK menuliskan sesuatu di buku catatannya.\n"
+                "  'Baik. Saya pegang janjimu.'\n"
+                "  Tidak banyak — tapi setidaknya ada arah yang disepakati."
+            },
+            {
+                "Alihkan: \"Saya tidak tahu, Bu. Mungkin soalnya sulit.\"", -15,
+                "Guru BK menatapmu lama. 'Haru, itu bukan jawaban yang aku cari.'\n"
+                "  Kamu tahu — tapi kamu tidak punya jawaban\n"
+                "  yang lebih baik saat itu."
+            },
         }, 4
     };
 
@@ -486,11 +741,37 @@ void buildPoolChapter2() {
         "   Kenapa nggak pernah cerita?\"\n\n"
         "  Jantungmu berdegup.",
         {
-            {"Ceritakan semuanya — impian, ketakutan, dan rencana.", +25},
-            {"Minta dia diam dan tidak cerita ke siapapun.", -10},
-            {"Pura-pura tidak tahu channel yang dimaksud.", -20},
-            {"Bilang itu cuma iseng, tidak serius.", -5},
-            {"Minta pendapat Nisa soal video-videomu.", +20},
+            {
+                "Ceritakan semuanya — impian, ketakutan, dan rencana.", +25,
+                "Nisa mendengarkan dengan serius. Matanya tidak menghakimi —\n"
+                "  malah berbinar sedikit. 'Haru... ini keren. Serius.'\n"
+                "  Untuk pertama kali, ada orang yang tahu.\n"
+                "  Dan rasanya tidak seburuk yang kamu bayangkan."
+            },
+            {
+                "Minta dia diam dan tidak cerita ke siapapun.", -10,
+                "Nisa mengangguk pelan, tapi ada ekspresi di wajahnya\n"
+                "  yang sulit dibaca. Kamu berhasil menutupnya —\n"
+                "  tapi entah untuk berapa lama."
+            },
+            {
+                "Pura-pura tidak tahu channel yang dimaksud.", -20,
+                "Nisa menatapmu dengan ekspresi terluka.\n"
+                "  'Aku sudah lihat videonya, Har. Aku nggak bohong.'\n"
+                "  Kamu memalingkan muka — dan jarak itu terasa\n"
+                "  tiba-tiba lebih jauh dari sebelumnya."
+            },
+            {
+                "Bilang itu cuma iseng, tidak serius.", -5,
+                "Nisa mengangguk. Tapi matanya bilang ia tidak sepenuhnya percaya.\n"
+                "  Kesempatan untuk terbuka itu lewat begitu saja."
+            },
+            {
+                "Minta pendapat Nisa soal video-videomu.", +20,
+                "Nisa langsung antusias. Ia buka videomu satu per satu\n"
+                "  dan kasih komentar jujur. Beberapa kritiknya perih —\n"
+                "  tapi semuanya berguna."
+            },
         }, 5
     };
 
@@ -501,10 +782,28 @@ void buildPoolChapter2() {
         "  Jam 16.05. Lima menit terlambat dari jadwal.\n"
         "  Ia menatapmu tanpa kata-kata.",
         {
-            {"Minta maaf langsung dan jelaskan alasannya.", +20},
-            {"Pura-pura tidak sadar soal keterlambatan.", -20},
-            {"Diam dan masuk rumah dengan cepat.", -10},
-            {"\"Maaf, Ayah. Ada yang perlu aku ceritakan.\"", +25},
+            {
+                "Minta maaf langsung dan jelaskan alasannya.", +20,
+                "Ayah mendengarkan. Ia tidak langsung memotong.\n"
+                "  Itu sudah langkah maju yang besar dari biasanya."
+            },
+            {
+                "Pura-pura tidak sadar soal keterlambatan.", -20,
+                "Ayah masuk ke dalam tanpa berkata apa-apa.\n"
+                "  Dan diam itu lebih berat dari amarah."
+            },
+            {
+                "Diam dan masuk rumah dengan cepat.", -10,
+                "Kamu masuk cepat. Tapi langkah Ayah di belakangmu\n"
+                "  terdengar berat — dan kamu tahu topik ini\n"
+                "  tidak akan selesai dengan sendirinya."
+            },
+            {
+                "\"Maaf, Ayah. Ada yang perlu aku ceritakan.\"", +25,
+                "Ayah menaikkan satu alis. Lalu ia melangkah ke samping,\n"
+                "  membiarkanmu masuk. 'Baik. Cerita.'\n"
+                "  Dua kata — tapi itu undangan yang jarang ia berikan."
+            },
         }, 4
     };
 
@@ -517,10 +816,31 @@ void buildPoolChapter2() {
         "   Mau kolaborasi video bareng minggu depan?\"\n\n"
         "  Tanganmu gemetar sedikit.",
         {
-            {"Balas: \"Mau banget! Kapan dan di mana?\"", -15},
-            {"Balas: \"Terima kasih. Boleh aku pikir dulu?\"", +25},
-            {"Tidak balas dulu — terlalu overwhelmed.", -5},
-            {"Balas dan langsung tanya soal teknis kolaborasi.", +15},
+            {
+                "Balas: \"Mau banget! Kapan dan di mana?\"", -15,
+                "Kamu kirim langsung. Tapi begitu HP ditaruh, kamu sadar —\n"
+                "  kamu belum tanya apapun soal konsep, format, atau persiapan.\n"
+                "  Panik kecil mulai merayap."
+            },
+            {
+                "Balas: \"Terima kasih. Boleh aku pikir dulu?\"", +25,
+                "Kaito balas: 'Sure, take your time.'\n"
+                "  Kamu taruh HP dan menarik napas.\n"
+                "  Kesempatan itu tidak kemana-mana — dan kamu punya waktu\n"
+                "  untuk mempersiapkan diri dengan benar."
+            },
+            {
+                "Tidak balas dulu — terlalu overwhelmed.", -5,
+                "Kamu stare ke layar selama dua menit, lalu taruh HP.\n"
+                "  DM itu masih di sana. Belum terlambat —\n"
+                "  tapi jendela kesempatan tidak terbuka selamanya."
+            },
+            {
+                "Balas dan langsung tanya soal teknis kolaborasi.", +15,
+                "Kamu tanya soal platform, durasi, dan topik.\n"
+                "  Kaito terkesan dengan pertanyaan yang spesifik.\n"
+                "  'Kamu serius ya. Bagus.' Fondasi yang kuat untuk kolaborasi."
+            },
         }, 4
     };
 
@@ -532,11 +852,37 @@ void buildPoolChapter2() {
         "  akses ke platform video, pukul 22.15, 47 menit.\n\n"
         "  \"Jelaskan.\"",
         {
-            {"Minta maaf dan berjanji tidak mengulangi.", -10},
-            {"Tunjukkan statistik channel: 47 subscriber, engagement rate.", +25},
-            {"Marah: \"Aku hanya ingin sedikit kebebasan!\"", -25},
-            {"Diam dan terima hukuman.", -15},
-            {"\"Ayah, boleh aku cerita sesuatu?\" — minta bicara baik-baik.", +20},
+            {
+                "Minta maaf dan berjanji tidak mengulangi.", -10,
+                "Ayah mengangguk pelan. Tapi kamu bisa lihat\n"
+                "  ia tidak puas dengan jawaban itu.\n"
+                "  Malam ini selesai — tapi masalahnya belum."
+            },
+            {
+                "Tunjukkan statistik channel: 47 subscriber, engagement rate.", +25,
+                "Ayah menatap angka-angka itu. Lama.\n"
+                "  Lalu ia menaruh kertas itu kembali ke meja — tapi tidak melipatnya.\n"
+                "  'Lanjut makan dulu.' Kamu tahu itu bukan akhir percakapan.\n"
+                "  Tapi bukan penolakan juga."
+            },
+            {
+                "Marah: \"Aku hanya ingin sedikit kebebasan!\"", -25,
+                "Suaramu lebih keras dari yang kamu rencanakan.\n"
+                "  Ibu meletakkan sendoknya. Ayah berdiri.\n"
+                "  Malam itu tidak ada yang bisa diperbaiki lagi."
+            },
+            {
+                "Diam dan terima hukuman.", -15,
+                "Kamu terima. Tapi ada yang hancur sedikit di dalam —\n"
+                "  dan Ayah juga tampaknya merasakannya.\n"
+                "  Diam bukan selalu aman."
+            },
+            {
+                "\"Ayah, boleh aku cerita sesuatu?\" — minta bicara baik-baik.", +20,
+                "Ayah terdiam. Ibu menatapnya.\n"
+                "  Lalu Ayah duduk kembali. 'Baik. Bicara.'\n"
+                "  Ini belum selesai — tapi setidaknya pintunya terbuka."
+            },
         }, 5
     };
 
@@ -548,10 +894,30 @@ void buildPoolChapter2() {
         "  Kalau ada proposal konkret untuk Ayah,\n"
         "  mungkin ia mau mendengarkan.",
         {
-            {"Tulis target nilai + jadwal konten yang realistis.", +25},
-            {"Nulis impian besar tanpa detail konkret.", +5},
-            {"Tutup buku — terlalu lelah untuk berpikir malam ini.", -10},
-            {"Tulis surat untuk Ayah alih-alih proposal.", +15},
+            {
+                "Tulis target nilai + jadwal konten yang realistis.", +25,
+                "Dua kolom, target konkret, jadwal yang masuk akal.\n"
+                "  Kamu lihat hasilnya dan untuk pertama kali,\n"
+                "  impian itu terasa seperti rencana sungguhan."
+            },
+            {
+                "Nulis impian besar tanpa detail konkret.", +5,
+                "Kamu tulis impian besar dengan tinta penuh semangat.\n"
+                "  Tidak ada detail — tapi energinya ada.\n"
+                "  Mungkin detail bisa menyusul besok."
+            },
+            {
+                "Tutup buku — terlalu lelah untuk berpikir malam ini.", -10,
+                "Kamu tutup buku. Lelah itu nyata —\n"
+                "  dan kamu putuskan untuk membiarkannya.\n"
+                "  Tapi besok, semua masalah ini masih akan menunggu."
+            },
+            {
+                "Tulis surat untuk Ayah alih-alih proposal.", +15,
+                "Kamu tulis surat — bukan untuk dikirim, tapi untuk dimengerti.\n"
+                "  Setiap kalimat yang kamu tulis ke Ayah\n"
+                "  membantumu memahami apa sebenarnya yang ingin kamu katakan padanya."
+            },
         }, 4
     };
 
@@ -563,10 +929,31 @@ void buildPoolChapter2() {
         "  Tapi kali ini bukan sekadar vlog —\n"
         "  kamu ingin bikin sesuatu yang benar-benar jujur.",
         {
-            {"Rekam video curahan hati soal keluarga dan impian.", +20},
-            {"Rekam tapi tidak upload — simpan untuk diri sendiri.", +15},
-            {"Upload video lama yang sudah diedit.", +5},
-            {"Matikan laptop — terlalu berisiko.", -5},
+            {
+                "Rekam video curahan hati soal keluarga dan impian.", +20,
+                "Kamu bicara ke kamera tentang segalanya —\n"
+                "  Ayah, impian, takut, harap. Rekaman selesai.\n"
+                "  Kamu tidak langsung upload. Tapi ada sesuatu yang lega\n"
+                "  keluar setelah mengatakannya keras-keras."
+            },
+            {
+                "Rekam tapi tidak upload — simpan untuk diri sendiri.", +15,
+                "Kamu rekam dan simpan. Itu untuk dirimu sendiri —\n"
+                "  dan itu cukup. Tidak semua konten harus dilihat orang lain\n"
+                "  untuk bermakna."
+            },
+            {
+                "Upload video lama yang sudah diedit.", +5,
+                "Video lama yang sudah diedit itu akhirnya terupload.\n"
+                "  Sederhana, tapi jujur. Kamu tutup laptop\n"
+                "  dan tidur dengan perasaan yang tidak terlalu berat."
+            },
+            {
+                "Matikan laptop — terlalu berisiko.", -5,
+                "Kamu matikan laptop. Malam ini tidak ada yang terekam.\n"
+                "  Tapi pikiran itu tidak ikut mati —\n"
+                "  ia hanya menunggu di kepalamu sampai besok."
+            },
         }, 4
     };
 
@@ -578,10 +965,32 @@ void buildPoolChapter2() {
         "  Saat kamu masuk, ia tersenyum.\n"
         "  \"Haru, Ibu mau bicara sebentar.\"",
         {
-            {"Duduk dan dengarkan.", +25},
-            {"\"Maaf Bu, buru-buru. Nanti saja ya.\"", -10},
-            {"Duduk tapi sambil lihat HP.", -5},
-            {"Tanya duluan: \"Ibu mau bilang apa?\"", +15},
+            {
+                "Duduk dan dengarkan.", +25,
+                "Ibu bercerita pelan — tentang Ayah muda yang punya mimpi serupa,\n"
+                "  tentang pilihan-pilihan yang ia buat, tentang kenapa ia keras.\n"
+                "  Kamu menyimak setiap kata. Dan tiba-tiba\n"
+                "  Ayah terasa sedikit lebih manusiawi."
+            },
+            {
+                "\"Maaf Bu, buru-buru. Nanti saja ya.\"", -10,
+                "Ibu menatap punggungmu. Ia tidak memanggil lagi.\n"
+                "  Kamu tidak tahu apa yang ingin ia katakan —\n"
+                "  dan mungkin kamu tidak akan pernah tahu hari itu."
+            },
+            {
+                "Duduk tapi sambil lihat HP.", -5,
+                "Kamu duduk tapi matamu di HP.\n"
+                "  Ibu mulai bicara, tapi kamu hanya menangkap separuhnya.\n"
+                "  Saat ia selesai, kamu mengangguk — tapi tidak benar-benar mendengar."
+            },
+            {
+                "Tanya duluan: \"Ibu mau bilang apa?\"", +15,
+                "Ibu tersenyum kecil.\n"
+                "  'Ibu mau bilang... Ibu bangga kamu sudah bertahan sejauh ini.'\n"
+                "  Itu saja. Tapi kamu harus tahan napas\n"
+                "  agar tidak terlalu keliatan terharu."
+            },
         }, 4
     };
 }
@@ -734,6 +1143,13 @@ int playEvent(Event* ev, int currentPoints) {
     int newPoints = currentPoints + chosen.pointDelta;
 
     printLine();
+
+    // Tampilkan narasi respons pilihan
+    cout << "\n  " << chosen.response << "\n";
+
+    printLine();
+
+    // Tampilkan perubahan poin
     if (chosen.pointDelta > 0) {
         cout << "\n  + " << chosen.pointDelta << " poin! ("
              << currentPoints << " -> " << newPoints << ")\n";
