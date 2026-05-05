@@ -1,35 +1,26 @@
 /*
-=============================================================
-  LAYAR LAIN: Kisah di Balik Panel
-  Visual Novel Terminal - C++
-  
-  Struktur Data yang digunakan:
-  - Array        : pilihan dialog, inventory log
-  - Struct       : karakter, scene, dialog, diary entry
-  - Pointer      : navigasi scene, linked list node
-  - Single LL    : rantai chapter/scene
-  - Double LL    : diary entry (bisa traversal dua arah)
-  - Stack        : history pilihan per chapter (untuk reset)
-  - Queue        : antrian dialog dalam scene
-  - Tree         : decision tree pilihan cerita
-=============================================================
-*/
+ * ============================================================
+ *  MANGA RESET: Dunia yang Kulupa
+ *  A Terminal Story Game in C++
+ * ============================================================
+ *  Data Structures Used:
+ *  - Array       : dialog pools, choice arrays, reset monologs
+ *  - Struct      : Character, Scene, Choice, GameState
+ *  - Pointer     : Scene navigation via node pointers
+ *  - Linked List : Story chapter chain & dialog history
+ *  - Stack       : Game state save/restore for reset system
+ *  - Queue       : Dialog display queue (sequential narration)
+ *  - Graph/Tree  : Branching story tree (choices -> outcomes)
+ * ============================================================
+ */
 
 #include <iostream>
 #include <string>
-#include <stack>
 #include <queue>
+#include <stack>
 #include <vector>
 #include <limits>
 #include <cstdlib>
-#include <cstring>
-
-#ifdef _WIN32
-    #include <windows.h>
-    #define CLEAR "cls"
-#else
-    #define CLEAR "clear"
-#endif
 
 using namespace std;
 
@@ -37,1372 +28,874 @@ using namespace std;
 // STRUCT DEFINITIONS
 // ============================================================
 
-struct Karakter {
-    string nama;
-    string deskripsi;
-    int relationship;  // 0-100
-    bool terungkap;    // apakah identitas femboy sudah terungkap
+struct Character {
+    string name;
+    string role;         // "protagonist", "npc"
+    string description;
 };
 
+struct Choice {
+    string text;
+    int    nextSceneId;  // -1 = wrong choice (triggers reset)
+    bool   isCorrect;
+};
+
+struct Scene {
+    int           id;
+    string        title;
+    string        narration;        // main story text
+    vector<string> dialogs;         // sequential dialog lines
+    Choice        choices[4];       // up to 4 choices (array)
+    int           choiceCount;
+    bool          isEnding;
+    int           endingType;       // 1, 2, 3
+};
+
+struct GameState {
+    int  currentSceneId;
+    int  resetCount;
+    bool gameOver;
+    bool reachedEnding;
+};
+
+// ============================================================
+// LINKED LIST — Dialog History
+// ============================================================
+
 struct DialogNode {
-    string teks;
-    string speaker;   // "" = narasi
+    string     text;
     DialogNode* next;
 };
 
-struct PilihanNode {
-    string teks;
-    bool benar;       // apakah pilihan ini yang "canon"
-    int childLeft;    // index scene jika salah
-    int childRight;   // index scene jika benar
-    PilihanNode* next;
-};
+struct DialogHistory {
+    DialogNode* head;
+    int         count;
 
-// Tree node untuk decision branching
-struct TreeNode {
-    string pertanyaan;
-    string pilihan[4];
-    bool benar[4];
-    int jumlahPilihan;
-    int sceneBenar;   // index scene selanjutnya jika benar
-    int sceneSalah;   // index scene jika salah (reset)
-    TreeNode* children[4];
-    
-    TreeNode() {
-        jumlahPilihan = 0;
-        sceneBenar = -1;
-        sceneSalah = -1;
-        for(int i = 0; i < 4; i++) children[i] = nullptr;
-        for(int i = 0; i < 4; i++) benar[i] = false;
+    DialogHistory() : head(nullptr), count(0) {}
+
+    void push(const string& text) {
+        DialogNode* node = new DialogNode{text, head};
+        head = node;
+        count++;
+    }
+
+    void printAll() const {
+        cout << "\n--- Riwayat Pilihanmu ---\n";
+        DialogNode* cur = head;
+        // collect to print in order
+        vector<string> temp;
+        while (cur) {
+            temp.push_back(cur->text);
+            cur = cur->next;
+        }
+        for (int j = (int)temp.size() - 1; j >= 0; j--) {
+            cout << "  " << (count - j) << ". " << temp[j] << "\n";
+        }
+        cout << "------------------------\n";
+    }
+
+    ~DialogHistory() {
+        DialogNode* cur = head;
+        while (cur) {
+            DialogNode* nxt = cur->next;
+            delete cur;
+            cur = nxt;
+        }
     }
 };
 
-// Single Linked List node untuk chapter
+// ============================================================
+// LINKED LIST — Story Chapter Chain
+// ============================================================
+
 struct ChapterNode {
-    int id;
-    string judul;
-    string deskripsiSingkat;
-    bool sudahClear;
+    int          sceneId;
+    string       chapterTitle;
     ChapterNode* next;
-    
-    ChapterNode(int _id, string _judul, string _desk) {
-        id = _id;
-        judul = _judul;
-        deskripsiSingkat = _desk;
-        sudahClear = false;
-        next = nullptr;
-    }
 };
 
-// Double Linked List node untuk diary
-struct DiaryNode {
-    int id;
-    string tanggal;
-    string judul;
-    string isi;
-    DiaryNode* prev;
-    DiaryNode* next;
-    
-    DiaryNode(int _id, string _tgl, string _judul, string _isi) {
-        id = _id;
-        tanggal = _tgl;
-        judul = _judul;
-        isi = _isi;
-        prev = nullptr;
-        next = nullptr;
+struct ChapterList {
+    ChapterNode* head;
+    ChapterNode* tail;
+
+    ChapterList() : head(nullptr), tail(nullptr) {}
+
+    void append(int sceneId, const string& title) {
+        ChapterNode* node = new ChapterNode{sceneId, title, nullptr};
+        if (!tail) { head = tail = node; }
+        else { tail->next = node; tail = node; }
+    }
+
+    void printProgress(int currentId) const {
+        cout << "\n--- Progress Cerita ---\n";
+        ChapterNode* cur = head;
+        while (cur) {
+            if (cur->sceneId == currentId)
+                cout << "  >> " << cur->chapterTitle << " (sekarang)\n";
+            else if (cur->sceneId < currentId)
+                cout << "  [v] " << cur->chapterTitle << "\n";
+            cur = cur->next;
+        }
+        cout << "-----------------------\n";
+    }
+
+    ~ChapterList() {
+        ChapterNode* cur = head;
+        while (cur) {
+            ChapterNode* nxt = cur->next;
+            delete cur;
+            cur = nxt;
+        }
     }
 };
 
 // ============================================================
-// GLOBAL STATE
+// STACK — Game State for Reset System
 // ============================================================
 
-Karakter mc;
-Karakter femboy;
-int chapterSaatIni = 0;
-int totalChapterClear = 0;
-bool gameOver = false;
-bool gameWin = false;
+struct StateStack {
+    stack<GameState> stk;
 
-// Single Linked List - chain of chapters
-ChapterNode* headChapter = nullptr;
+    void save(const GameState& gs) { stk.push(gs); }
 
-// Double Linked List - diary
-DiaryNode* headDiary = nullptr;
-DiaryNode* tailDiary = nullptr;
-int diaryCount = 0;
+    GameState restore() {
+        if (!stk.empty()) {
+            GameState gs = stk.top();
+            // don't pop — we restore to the very first state always
+            return gs;
+        }
+        return {0, 0, false, false};
+    }
 
-// Stack - history pilihan dalam chapter (untuk reset)
-stack<string> historyPilihan;
+    GameState getInitial() {
+        // get bottom of stack = initial state
+        stack<GameState> tmp = stk;
+        GameState init;
+        while (!tmp.empty()) { init = tmp.top(); tmp.pop(); }
+        return init;
+    }
+};
+
+// ============================================================
+// QUEUE — Dialog Display
+// ============================================================
+
+void displayDialogQueue(vector<string>& lines) {
+    queue<string> q;
+    for (auto& l : lines) q.push(l);
+
+    while (!q.empty()) {
+        cout << q.front() << "\n";
+        q.pop();
+    }
+}
 
 // ============================================================
 // UTILITY FUNCTIONS
 // ============================================================
 
-void clearScreen() {
-    system(CLEAR);
-}
-
-void pauseScreen() {
-    cout << "\n\033[90m[ Tekan ENTER untuk melanjutkan... ]\033[0m";
+void pressEnter() {
+    cout << "\n[Tekan ENTER untuk melanjutkan...]";
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
     cin.get();
 }
 
-void printGaris(char c = '=', int panjang = 60) {
-    for(int i = 0; i < panjang; i++) cout << c;
-    cout << "\n";
+void printSeparator() {
+    cout << "\n============================================================\n";
 }
 
-void printJudul(string teks) {
-    clearScreen();
-    printGaris('=');
-    int spasi = (60 - teks.length()) / 2;
-    for(int i = 0; i < spasi; i++) cout << " ";
-    cout << "\033[1;93m" << teks << "\033[0m\n";
-    printGaris('=');
-    cout << "\n";
+void printLine() {
+    cout << "------------------------------------------------------------\n";
 }
 
-void printNarasi(string teks) {
-    cout << "\033[3;37m  " << teks << "\033[0m\n";
-}
-
-void printDialog(string speaker, string teks) {
-    if(speaker == "") {
-        printNarasi(teks);
-    } else {
-        cout << "\033[1;96m" << speaker << "\033[0m";
-        cout << ": \033[97m\"" << teks << "\"\033[0m\n";
-    }
-}
-
-void printSistem(string teks) {
-    cout << "\n\033[1;91m[ " << teks << " ]\033[0m\n";
-}
-
-void printInfo(string teks) {
-    cout << "\033[1;92m>> " << teks << "\033[0m\n";
-}
-
-void animasiKetik(string teks, int delay = 30) {
-    for(char c : teks) {
-        cout << c;
-        cout.flush();
-#ifdef _WIN32
-        Sleep(delay);
-#else
-        // simple delay loop
-        for(volatile long i = 0; i < delay * 1000L; i++);
-#endif
-    }
-    cout << "\n";
-}
-
-void printTruk() {
-    cout << "\033[1;91m\n";
-    cout << "        _____________\n";
-    cout << "       |  TRUCK-KUN  |\n";
-    cout << "       |_____________|\n";
-    cout << "    __|_____________|__\n";
-    cout << "   |  ___       ___   |\n";
-    cout << "   | |   |     |   |  |\n";
-    cout << "   |_|___|_____|___|__|\n";
-    cout << "     (O)           (O)\n";
-    cout << "\033[0m\n";
-}
-
-void printStar() {
-    cout << "\033[1;93m";
-    cout << "    ✦ ✧ ✦ ✧ ✦ ✧ ✦ ✧ ✦ ✧ ✦ ✧ ✦ ✧ ✦ \n";
-    cout << "\033[0m";
-}
-
-// ============================================================
-// QUEUE: Dialog System
-// ============================================================
-
-class DialogQueue {
-private:
-    queue<pair<string,string>> q; // <speaker, teks>
-public:
-    void tambah(string speaker, string teks) {
-        q.push({speaker, teks});
-    }
-    
-    void jalankan() {
-        while(!q.empty()) {
-            auto [speaker, teks] = q.front();
-            q.pop();
-            cout << "\n";
-            printDialog(speaker, teks);
-            if(!q.empty()) {
-                cout << "\033[90m  ...\033[0m\n";
-                pauseScreen();
-            }
+int getChoice(int max) {
+    int c;
+    while (true) {
+        cout << "\n> Pilihanmu: ";
+        if (cin >> c && c >= 1 && c <= max) {
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            return c;
         }
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "  Masukkan angka antara 1 dan " << max << ".\n";
     }
-    
-    bool kosong() { return q.empty(); }
-};
-
-// ============================================================
-// SINGLE LINKED LIST: Chapter Management
-// ============================================================
-
-void tambahChapter(int id, string judul, string desk) {
-    ChapterNode* baru = new ChapterNode(id, judul, desk);
-    if(!headChapter) {
-        headChapter = baru;
-        return;
-    }
-    ChapterNode* cur = headChapter;
-    while(cur->next) cur = cur->next;
-    cur->next = baru;
 }
 
-ChapterNode* cariChapter(int id) {
-    ChapterNode* cur = headChapter;
-    while(cur) {
-        if(cur->id == id) return cur;
-        cur = cur->next;
+// ============================================================
+// RESET MONOLOGS — Array of strings
+// ============================================================
+
+const string resetMonologs[] = {
+    // reset 1
+    "\"Eh—?!\"\n\n"
+    "Dunia berputar. Langit jadi gelap. Aku merasakan tubuhku seperti\n"
+    "ditarik paksa ke belakang, ke dalam sesuatu yang dingin dan kosong.\n\n"
+    "Dan tiba-tiba... aku di sini lagi.\n\n"
+    "\"W-wait. Ini... ini bukan pertama kalinya aku lihat ini...\"\n\n"
+    "Aku salah. Pasti aku salah pilih. Sial.\n"
+    "Baik. Oke. Aku harus ingat-ingat lagi cerita manga itu...\n",
+
+    // reset 2
+    "\"TIDAK TIDAK TIDAK!\"\n\n"
+    "Lagi. Lagi dunia ini menarikku mundur.\n"
+    "Sensasinya seperti tenggelam — tapi ke atas. Aneh banget.\n\n"
+    "Dan semuanya... reset.\n\n"
+    "\"Ugh, aku udah dua kali gagal. Dua kali!\"\n\n"
+    "Aku mengepalkan tangan. Coba tenang. Pikir.\n"
+    "Manga itu... judulnya apa ya... aku baca 5 tahun lalu, saat kelas 2 SMP.\n"
+    "Kenapa aku nggak ingat-ingat lagi waktu itu?!\n",
+
+    // reset 3
+    "Kali ini tidak ada teriakan.\n\n"
+    "Aku sudah tahu rasanya. Dunia berputar, gelap, dingin.\n"
+    "Lalu muncul lagi. Di sini. Di awal.\n\n"
+    "\"...Tiga kali.\"\n\n"
+    "Aku duduk diam sebentar sebelum semuanya benar-benar muncul lagi.\n"
+    "Oke. Sistemnya jelas: ada satu pilihan yang benar di setiap situasi.\n"
+    "Kalau salah, balik ke awal. Tanpa ampun.\n\n"
+    "Aku harus berpikir seperti pembaca manga, bukan seperti diri sendiri.\n"
+    "Apa yang akan dilakukan MC yang benar?\n",
+
+    // reset 4
+    "\"...Ha.\"\n\n"
+    "Aku ketawa kecil waktu dunia itu mulai berputar lagi.\n"
+    "Empat kali. Sudah empat kali.\n\n"
+    "Entah kenapa sekarang rasanya lebih seperti permainan daripada mimpi buruk.\n"
+    "Atau mungkin aku mulai gila? Dua kemungkinan yang sama valid.\n\n"
+    "\"Oke, Haru.\" — itu nama MC di manga ini kalau aku nggak salah ingat —\n"
+    "\"Kamu tipe anak yang gimana sih?\"\n\n"
+    "Aku mulai mengingat. Sedikit demi sedikit.\n",
+
+    // reset 5+
+    "Dunia berputar. Gelap. Dingin. Muncul lagi.\n\n"
+    "Sudah berapa kali ini? Aku sudah berhenti menghitung.\n\n"
+    "Tapi aku semakin dekat. Aku bisa merasakannya.\n"
+    "Setiap kali aku gagal, aku mendapat satu petunjuk lebih.\n\n"
+    "\"Aku pasti bisa. Pasti.\"\n\n"
+    "Kali ini — aku sudah ingat lebih banyak.\n"
+    "Ayo, Haru. Ayo.\n",
+};
+const int RESET_MONOLOG_COUNT = 5;
+
+// ============================================================
+// SCENE DATABASE — Story Tree (Graph/Tree)
+// ============================================================
+/*
+ *  Scene Graph:
+ *
+ *  0 (Prolog)
+ *  └─► 1 (Bangun Pagi)
+ *      ├─► RESET (salah)
+ *      └─► 2 (Sarapan)
+ *          ├─► RESET (salah)
+ *          └─► 3 (Pulang Sekolah)
+ *              ├─► RESET (salah)
+ *              └─► 4 (Malam — Buat Konten)
+ *                  ├─► RESET (salah)
+ *                  └─► 5 (Ketahuan)
+ *                      ├─► RESET (salah)
+ *                      └─► 6 (Konfrontasi)
+ *                          ├─► RESET (salah)
+ *                          └─► 7 (Persimpangan)
+ *                              ├─► ENDING 1: Patuh
+ *                              ├─► ENDING 2: Lari
+ *                              └─► ENDING 3: Negosiasi
+ */
+
+Scene scenes[20];
+int   sceneCount = 0;
+
+void buildSceneDatabase() {
+
+    // ── SCENE 0 : Prolog ─────────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id            = 0;
+        s.title         = "Prolog: Dunia yang Kulupa";
+        s.choiceCount   = 0;
+        s.isEnding      = false;
+        s.narration =
+            "Namaku Ren. 18 tahun. Otaku.\n\n"
+            "Hari itu biasa saja. Aku pulang dari toko manga langgananku,\n"
+            "menenteng tiga volume baru sambil mempertimbangkan mau baca yang mana\n"
+            "duluan. Langit sore berwarna oranye. Jalanan ramai.\n\n"
+            "Dan kemudian...\n\n"
+            "...truk.\n\n"
+            "Aku tidak sempat berteriak.\n\n"
+            "---\n\n"
+            "Saat mataku terbuka, ini bukan kamarku.\n"
+            "Ini bukan langit-langit putih yang biasa kulihat setiap pagi.\n\n"
+            "Ini kamar orang lain. Rapi. Akademis. Ada poster jadwal pelajaran\n"
+            "di dinding. Ada meja belajar penuh buku. Ada satu laptop tua\n"
+            "di pojokan yang tampaknya sengaja disembunyikan di balik tumpukan binder.\n\n"
+            "Dan di cermin di depanku...\n"
+            "bukan wajahku.\n\n"
+            "\"Ini... Haru?\"\n\n"
+            "Suara yang keluar dari mulutku bukan suaraku.\n"
+            "Tapi aku ingat nama itu.\n\n"
+            "Haru Mizushima. MC dari sebuah manga slice of life yang aku baca\n"
+            "sekitar 5 tahun lalu. Judulnya... apa ya...\n"
+            "Aku sudah lupa banyak detailnya.\n\n"
+            "Yang aku ingat: hidupnya keras. Keluarganya keras.\n"
+            "Dan ada satu cerita yang harus dijalani.\n\n"
+            "Aku tidak punya pilihan lain selain... menjalaninya.\n\n"
+            "Semoga aku ingat cukup banyak untuk tidak merusaknya.\n";
+        s.dialogs = {};
+    }
+
+    // ── SCENE 1 : Bangun Pagi ────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 1;
+        s.title       = "Chapter 1: Pagi di Keluarga Mizushima";
+        s.isEnding    = false;
+        s.narration =
+            "Alarm berbunyi pukul 05.30.\n\n"
+            "Dari bawah terdengar suara langkah kaki tegas — itu pasti Ayah.\n"
+            "Suara pintu dapur dibuka. Suara kompor. Aroma nasi.\n\n"
+            "Di meja belajar ada selembar kertas. Jadwal harian yang ditulis tangan\n"
+            "dengan spidol merah oleh seseorang — pasti orang tua Haru.\n\n"
+            "  05.30 - Bangun\n"
+            "  05.45 - Olahraga pagi (lari 2 km)\n"
+            "  06.15 - Mandi & siap\n"
+            "  06.45 - Sarapan bersama\n"
+            "  07.00 - Berangkat sekolah\n\n"
+            "Di pojok kertas ada tulisan kecil: 'Kalau terlambat satu menit,\n"
+            "tidak ada uang jajan seminggu.'\n\n"
+            "Aku menatap jadwal itu. Lari 2 km sebelum subuh?\n"
+            "Ini serius?\n\n"
+            "Tapi aku ingat samar-samar — di manga ini, ada momen pagi yang jadi\n"
+            "turning point. Haru melakukan sesuatu sebelum sarapan.\n"
+            "Apa ya...\n";
+        s.dialogs = {};
+        s.choiceCount = 3;
+        s.choices[0] = {"Ikuti jadwal — langsung lari 2 km sesuai yang tertulis.", 2, true};
+        s.choices[1] = {"Tidur lagi sebentar. Masih ngantuk dan capek.", -1, false};
+        s.choices[2] = {"Duduk di meja belajar dan mulai belajar — lebih produktif daripada lari.", -1, false};
+    }
+
+    // ── SCENE 2 : Sarapan ────────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 2;
+        s.title       = "Chapter 2: Meja Makan Keluarga Mizushima";
+        s.isEnding    = false;
+        s.narration =
+            "Meja makan keluarga Mizushima adalah tempat paling tegang di rumah ini.\n\n"
+            "Ayah — Mizushima Kenji — duduk di ujung meja dengan koran di tangan.\n"
+            "Ia tidak melihat ke arahku. Tapi kehadirannya terasa seperti tekanan fisik.\n"
+            "Ibu menyajikan miso sup tanpa bicara.\n\n"
+            "Kakakku — Hana, 21 tahun — sudah duduk rapi dengan seragam kantornya.\n"
+            "Ia adalah 'standar' yang selalu disebut Ayah: 'Lihat kakakmu, nilai sempurna,\n"
+            "kerja di perusahaan bagus, tidak memalukan.'\n\n"
+            "Aku — Haru — duduk dan mulai makan.\n\n"
+            "Ayah menaruh koran. Menatapku.\n\n"
+            "\"Haru. Nilai ulangan matematika minggu lalu.\"\n\n"
+            "Bukan pertanyaan. Pernyataan. Ia sudah tahu.\n\n"
+            "Aku ingat samar-samar — ada momen di manga ini soal nilai.\n"
+            "Haru mendapat nilai berapa ya... 78? 82?\n"
+            "Yang penting, jawabannya bukan sempurna.\n\n"
+            "Ayah menunggu.\n";
+        s.dialogs = {
+            "Ayah: \"Nilai ulangan matematika minggu lalu.\"\n",
+        };
+        s.choiceCount = 3;
+        s.choices[0] = {"Jawab jujur dengan tenang: \"78, Ayah. Aku akan lebih giat belajar.\"", 3, true};
+        s.choices[1] = {"Diam saja dan pura-pura tidak dengar.", -1, false};
+        s.choices[2] = {"Berbohong: \"Sudah bagus kok, Ayah. Di atas rata-rata kelas.\"", -1, false};
+    }
+
+    // ── SCENE 3 : Pulang Sekolah ─────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 3;
+        s.title       = "Chapter 3: Sepulang Sekolah";
+        s.isEnding    = false;
+        s.narration =
+            "Sekolah berakhir pukul 15.30.\n\n"
+            "Teman sekelas Haru — Dito dan Nisa — mengajakku mampir ke kafe kecil\n"
+            "dekat sekolah. Mereka tahu aku jarang bisa keluar.\n\n"
+            "Dito: \"Ayolah, Haru. Sekali-kali. Kita nggak lama.\"\n"
+            "Nisa: \"Iya, ada konten kreator yang lagi live di sana. Tau nggak, si Kaito?\n"
+            "       Dia yang bikin video tentang kehidupan SMA itu. Seru banget.\"\n\n"
+            "Hatiku bereaksi ke nama itu.\n"
+            "Kaito. Ya — aku ingat. Di manga ini Kaito adalah orang yang pertama kali\n"
+            "menginspirasi Haru untuk mulai membuat konten.\n\n"
+            "Tapi ada jadwal. Haru harus pulang sebelum pukul 16.00.\n"
+            "Kalau terlambat, Ayah sudah menunggu di depan pintu dengan muka datar\n"
+            "yang sepuluh kali lebih menakutkan daripada ekspresi marah.\n\n"
+            "Aku melihat jam. 15.40.\n";
+        s.dialogs = {
+            "Dito: \"Ayolah, Haru. Sekali-kali.\"\n",
+            "Nisa: \"Ada Kaito lagi live di sana! Yang bikin video kehidupan SMA itu.\"\n",
+        };
+        s.choiceCount = 3;
+        s.choices[0] = {"Tolak dengan sopan dan langsung pulang tepat waktu.", 4, true};
+        s.choices[1] = {"Ikut ke kafe — mumpung ada Kaito, ini kesempatan langka.", -1, false};
+        s.choices[2] = {"Minta Nisa kirimkan rekaman live-nya saja, lalu pulang.", -1, false};
+    }
+
+    // ── SCENE 4 : Malam — Buat Konten ────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 4;
+        s.title       = "Chapter 4: Kamar dan Rahasia";
+        s.isEnding    = false;
+        s.narration =
+            "Pukul 22.00. Rumah sudah sepi.\n\n"
+            "Suara TV dari kamar orang tua sudah mati sejak setengah jam lalu.\n"
+            "Hana sudah tidur. Ayah dan Ibu sudah tidur.\n\n"
+            "Aku duduk di depan laptop tua yang tersembunyi di balik binder.\n"
+            "Layarnya redup — aku sudah pasang kecerahan paling rendah.\n"
+            "Kipasnya berisik, jadi aku taruh bantal tipis di bawahnya.\n\n"
+            "Di channel YouTube Haru yang masih kecil — 47 subscriber —\n"
+            "ada draft video yang belum diupload.\n\n"
+            "Judulnya: 'Hari Biasa Pelajar yang Tidak Bebas — Vlog #3'\n\n"
+            "Aku menatap tombol upload.\n\n"
+            "Di manga ini... apa yang dilakukan Haru malam itu?\n"
+            "Aku ingat ada momen krusial. Ia membuat sesuatu.\n"
+            "Bukan sekadar upload. Tapi sesuatu yang lebih... personal.\n";
+        s.dialogs = {};
+        s.choiceCount = 4;
+        s.choices[0] = {"Upload video yang sudah ada, lalu tidur.", -1, false};
+        s.choices[1] = {"Rekam video baru — curahan hati soal keluarga — dengan berbisik pelan.", 5, true};
+        s.choices[2] = {"Tutup laptop dan tidur. Terlalu berisiko malam ini.", -1, false};
+        s.choices[3] = {"Edit video lama sampai sempurna, tapi tidak upload.", -1, false};
+    }
+
+    // ── SCENE 5 : Ketahuan ───────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 5;
+        s.title       = "Chapter 5: Suara di Balik Pintu";
+        s.isEnding    = false;
+        s.narration =
+            "Aku sedang berbisik ke kamera — menceritakan hari ini, perasaan tertekan,\n"
+            "mimpi yang terasa semakin jauh — ketika...\n\n"
+            "Ketukan pintu.\n\n"
+            "Bukan ketukan biasa. Tiga kali. Pelan. Tapi tegas.\n\n"
+            "Aku mematikan laptop dalam satu gerakan. Jantungku berhenti sedetik.\n\n"
+            "\"Haru.\"\n\n"
+            "Suara Ayah.\n\n"
+            "Hening. Ia menunggu di luar.\n\n"
+            "Aku menatap pintu. Laptop sudah mati. Kabel sudah kusembunyikan.\n"
+            "Tapi apakah ia mendengar?\n\n"
+            "Di manga ini, momen ini adalah salah satu yang paling aku ingat.\n"
+            "Bukan karena dramanya — tapi karena reaksi Haru.\n"
+            "Ia tidak panik. Ia melakukan sesuatu yang sangat spesifik.\n";
+        s.dialogs = {
+            "Ayah: \"Haru.\"\n",
+            "Hening.\n",
+            "Ayah: \"Sudah jam berapa sekarang?\"\n",
+        };
+        s.choiceCount = 4;
+        s.choices[0] = {"Buka pintu secepatnya dan bilang: \"Baru saja mau tidur, Ayah.\"", -1, false};
+        s.choices[1] = {"Pura-pura sudah tidur — tidak menjawab sama sekali.", -1, false};
+        s.choices[2] = {"Jawab dari balik pintu dengan suara mengantuk: \"Sudah mau tidur, Ayah. Maaf.\"", 6, true};
+        s.choices[3] = {"Buka pintu dan tanya balik: \"Ada apa, Ayah?\"", -1, false};
+    }
+
+    // ── SCENE 6 : Konfrontasi ────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 6;
+        s.title       = "Chapter 6: Pagi yang Berbeda";
+        s.isEnding    = false;
+        s.narration =
+            "Keesokan paginya.\n\n"
+            "Aku turun ke meja makan seperti biasa.\n"
+            "Tapi atmosfernya berbeda.\n\n"
+            "Ibu tidak bicara. Hana pergi lebih awal dari biasanya.\n"
+            "Dan Ayah — Ayah duduk dengan selembar kertas di tangannya.\n\n"
+            "Aku melihat apa itu.\n\n"
+            "Laporan tagihan internet bulanan. Dengan highlight kuning di satu baris:\n"
+            "akses ke platform video malam hari, pukul 22.15, durasi 47 menit.\n\n"
+            "\"Duduk.\"\n\n"
+            "Aku duduk.\n\n"
+            "Ayah menaruh kertas itu di hadapanku.\n\n"
+            "\"Jelaskan.\"\n\n"
+            "Ini dia. Momen yang aku takutkan.\n"
+            "Dan sekaligus... momen yang aku tunggu.\n"
+            "Karena di manga ini, Haru tidak menyerah di sini.\n"
+            "Ia melakukan sesuatu. Tapi apa?\n";
+        s.dialogs = {
+            "Ayah: \"Duduk.\"\n",
+            "Ayah: \"Jelaskan.\"\n",
+            "Haru menatap kertas tagihan itu.\n",
+        };
+        s.choiceCount = 4;
+        s.choices[0] = {"Minta maaf dan berjanji tidak mengulangi.", -1, false};
+        s.choices[1] = {"Marah dan berteriak: \"Aku hanya ingin sedikit kebebasan!\"", -1, false};
+        s.choices[2] = {"Tunjukkan statistik channel: 47 subscriber, engagement rate, dan bilang ini serius.", 7, true};
+        s.choices[3] = {"Diam saja dan terima hukuman.", -1, false};
+    }
+
+    // ── SCENE 7 : Persimpangan — Pilih Ending ────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 7;
+        s.title       = "Chapter 7: Persimpangan";
+        s.isEnding    = false;
+        s.narration =
+            "Ayah diam lama setelah melihat statistik channel Haru.\n\n"
+            "Bukan diam yang marah. Diam yang... memproses.\n\n"
+            "Ibu masuk ke ruang makan dengan teh — ia pasti sudah mendengar semuanya\n"
+            "dari dapur.\n\n"
+            "Ayah akhirnya bicara:\n"
+            "\"Aku tidak pernah bilang kamu harus menjadi apa.\"\n"
+            "\"Aku hanya tidak mau kamu menyesal.\"\n\n"
+            "Kalimat itu menggantung di udara.\n\n"
+            "Haru — aku — menatap Ayah.\n"
+            "Dan untuk pertama kali dalam waktu yang lama, aku melihat sesuatu\n"
+            "di balik ekspresi keras itu:\n"
+            "kekhawatiran.\n\n"
+            "Ini persimpangan.\n"
+            "Di manga ini ada beberapa jalan yang bisa dipilih Haru.\n"
+            "Semua valid. Semua dengan konsekuensinya masing-masing.\n\n"
+            "Apa pilihanmu?\n";
+        s.dialogs = {
+            "Ayah: \"Aku tidak pernah bilang kamu harus menjadi apa.\"\n",
+            "Ayah: \"Aku hanya tidak mau kamu menyesal.\"\n",
+        };
+        s.choiceCount = 3;
+        // All 3 lead to endings
+        s.choices[0] = {"[ENDING 1] Setuju dengan Ayah — prioritaskan akademik, jadikan konten hobi sampingan.", 10, true};
+        s.choices[1] = {"[ENDING 2] Tolak dengan hormat — minta izin resmi untuk serius jadi content creator.", 11, true};
+        s.choices[2] = {"[ENDING 3] Tawarkan kompromi — nilai tetap dijaga, tapi diberi waktu khusus untuk konten.", 12, true};
+    }
+
+    // ── ENDING 1 ─────────────────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 10;
+        s.title       = "ENDING 1: Anak yang Patuh";
+        s.isEnding    = true;
+        s.endingType  = 1;
+        s.choiceCount = 0;
+        s.narration =
+            "\"Baik, Ayah. Aku mengerti.\"\n\n"
+            "Aku menunduk.\n\n"
+            "Tidak ada drama. Tidak ada air mata.\n"
+            "Hanya... ketenangan yang agak menyakitkan.\n\n"
+            "Aku menutup laptop itu rapat-rapat malam itu.\n"
+            "Channel dengan 47 subscriber itu tidak diupdate selama tiga bulan.\n\n"
+            "Tapi nilai matematikaku naik ke 91.\n"
+            "Ayah mengangguk saat melihat rapor.\n"
+            "Itu sudah lebih dari cukup untuk Ibu menangis haru.\n\n"
+            "Suatu sore, diam-diam, aku membuka channel itu lagi.\n"
+            "Bukan untuk upload.\n"
+            "Hanya untuk melihat.\n\n"
+            "Subscriber masih 47.\n"
+            "Tapi ada satu komentar baru dari tiga bulan lalu:\n"
+            "\"Haru, video-videomu bikin aku ngerasa nggak sendiri. Kapan upload lagi?\"\n\n"
+            "Aku menutup tab itu.\n"
+            "Besok masih ada ujian.\n\n"
+            "---\n\n"
+            "Dunia manga ini berjalan seperti seharusnya.\n"
+            "Dan aku — Ren — merasakan sesuatu yang hangat sekaligus berat\n"
+            "saat kesadaranku perlahan kembali ke dunia asalku.\n\n"
+            "Tidak semua cerita berakhir dengan dramatis.\n"
+            "Kadang ending paling nyata adalah yang paling sunyi.\n\n"
+            "                    [ ENDING 1 — SELESAI ]\n"
+            "          \"Kadang memilih damai adalah bentuk keberanian juga.\"\n";
+        s.dialogs = {};
+    }
+
+    // ── ENDING 2 ─────────────────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 11;
+        s.title       = "ENDING 2: Langkah Sendiri";
+        s.isEnding    = true;
+        s.endingType  = 2;
+        s.choiceCount = 0;
+        s.narration =
+            "\"Aku minta maaf, Ayah. Tapi ini yang aku mau.\"\n\n"
+            "Suara Haru tidak gemetar.\n"
+            "Itu mengejutkan Ayah — aku bisa melihatnya dari cara alisnya sedikit naik.\n\n"
+            "\"Aku tahu risikonya. Aku tahu ini tidak mudah.\n"
+            " Tapi aku ingin mencobanya dengan sungguh-sungguh.\n"
+            " Bukan diam-diam. Secara resmi. Dengan persetujuanmu — atau tanpanya.\"\n\n"
+            "Hening yang panjang.\n\n"
+            "Ayah berdiri. Berjalan ke jendela. Memandang ke luar.\n\n"
+            "\"Kamu tidak akan berubah pikiran?\"\n\n"
+            "\"Tidak.\"\n\n"
+            "Ayah tidak bilang iya. Tapi ia juga tidak bilang tidak.\n"
+            "Ia hanya mengangguk satu kali, pelan, dan pergi ke kamarnya.\n\n"
+            "Itu sudah cukup.\n\n"
+            "Tiga bulan kemudian, channel Haru punya 2.400 subscriber.\n"
+            "Video tentang 'Keluarga Keras dan Impian yang Tidak Boleh Mati'\n"
+            "ditonton 180.000 kali.\n\n"
+            "Ayah tidak pernah menyebut angka itu.\n"
+            "Tapi suatu hari Ibu bisik ke Haru:\n"
+            "\"Ayahmu... aku lihat dia menonton videomu semalam.\"\n\n"
+            "---\n\n"
+            "Aku — Ren — tersenyum sebelum dunia ini perlahan memudar.\n\n"
+            "Ada yang tidak perlu disetujui untuk tetap dicintai.\n\n"
+            "                    [ ENDING 2 — SELESAI ]\n"
+            "              \"Berani bukan berarti tidak takut —\n"
+            "               berani adalah tetap melangkah meski takut.\"\n";
+        s.dialogs = {};
+    }
+
+    // ── ENDING 3 ─────────────────────────────────────────────
+    {
+        Scene& s = scenes[sceneCount++];
+        s.id          = 12;
+        s.title       = "ENDING 3: Jalan Tengah";
+        s.isEnding    = true;
+        s.endingType  = 3;
+        s.choiceCount = 0;
+        s.narration =
+            "\"Aku punya usul, Ayah.\"\n\n"
+            "Aku membuka halaman baru di buku catatanku.\n"
+            "Menulis dua kolom: AKADEMIK dan KONTEN.\n\n"
+            "\"Nilai rata-rata di atas 85 — itu janjiku.\n"
+            " Sebagai gantinya, aku minta dua jam setiap hari Jumat dan Sabtu.\n"
+            " Kalau nilaiku turun di bawah itu, aku sendiri yang akan berhenti.\"\n\n"
+            "Ayah menatap kertasku. Lama.\n\n"
+            "Ibu meletakkan tehnya. \"Kenji...\"\n\n"
+            "Ayah mengambil kertasku. Membaca dua kali.\n"
+            "Lalu ia mengambil pena dari sakunya.\n"
+            "Dan menandatangani di bawah tulisanku.\n\n"
+            "Satu tanda tangan kecil yang rasanya lebih besar\n"
+            "dari semua kata-kata yang pernah tidak terucapkan di antara mereka.\n\n"
+            "---\n\n"
+            "Enam bulan kemudian, channel Haru punya 8.700 subscriber.\n"
+            "Nilai rata-rata Haru: 87.\n\n"
+            "Di video terbaru Haru — judulnya 'Perjanjian dengan Ayah' —\n"
+            "ada komentar dari akun tanpa foto profil:\n"
+            "\"Semangat. - Ayah\"\n\n"
+            "Haru tidak membalas komentar itu.\n"
+            "Tapi ia screenshot dan menjadikannya wallpaper.\n\n"
+            "---\n\n"
+            "Dunia ini memudar.\n"
+            "Aku — Ren — membuka mata di tempat yang familiar:\n"
+            "jalanan. Sore. Kantong plastik manga di tangan.\n\n"
+            "Tidak ada truk kali ini.\n\n"
+            "Aku berjalan pulang. Dan mungkin besok,\n"
+            "aku akan mencari manga itu lagi — judulnya apa ya...\n\n"
+            "                    [ ENDING 3 — SELESAI ]\n"
+            "         \"Kompromi bukan berarti kalah —\n"
+            "          kadang itu cara paling elegan untuk menang bersama.\"\n";
+        s.dialogs = {};
+    }
+}
+
+// ============================================================
+// SCENE LOOKUP (Graph traversal by ID)
+// ============================================================
+
+Scene* findScene(int id) {
+    for (int i = 0; i < sceneCount; i++) {
+        if (scenes[i].id == id) return &scenes[i];
     }
     return nullptr;
 }
 
-void tampilProgressChapter() {
-    printJudul("PROGRESS CERITA");
-    ChapterNode* cur = headChapter;
-    while(cur) {
-        if(cur->sudahClear) {
-            cout << "  \033[1;92m[CLEAR]\033[0m ";
-        } else if(cur->id == chapterSaatIni) {
-            cout << "  \033[1;93m[AKTIF]\033[0m ";
-        } else {
-            cout << "  \033[90m[KUNCI]\033[0m ";
-        }
-        cout << "Chapter " << cur->id << ": " << cur->judul << "\n";
-        if(cur->sudahClear || cur->id == chapterSaatIni) {
-            cout << "           \033[90m" << cur->deskripsiSingkat << "\033[0m\n";
-        }
-        cur = cur->next;
-    }
-    cout << "\n";
-    pauseScreen();
+// ============================================================
+// CHAPTER LIST BUILDER
+// ============================================================
+
+void buildChapterList(ChapterList& cl) {
+    cl.append(0,  "Prolog: Dunia yang Kulupa");
+    cl.append(1,  "Chapter 1: Pagi di Keluarga Mizushima");
+    cl.append(2,  "Chapter 2: Meja Makan");
+    cl.append(3,  "Chapter 3: Sepulang Sekolah");
+    cl.append(4,  "Chapter 4: Kamar dan Rahasia");
+    cl.append(5,  "Chapter 5: Suara di Balik Pintu");
+    cl.append(6,  "Chapter 6: Pagi yang Berbeda");
+    cl.append(7,  "Chapter 7: Persimpangan");
 }
 
 // ============================================================
-// DOUBLE LINKED LIST: Diary System
+// DISPLAY SCENE
 // ============================================================
 
-void tambahDiary(string tgl, string judul, string isi) {
-    diaryCount++;
-    DiaryNode* baru = new DiaryNode(diaryCount, tgl, judul, isi);
-    if(!headDiary) {
-        headDiary = tailDiary = baru;
-        return;
-    }
-    tailDiary->next = baru;
-    baru->prev = tailDiary;
-    tailDiary = baru;
-    printInfo("Entry diary berhasil ditambahkan!");
-}
+void displayScene(Scene* s, bool skipProlog, int resetCount) {
+    printSeparator();
+    cout << "  " << s->title << "\n";
+    printSeparator();
 
-void tampilSemuaDiary() {
-    printJudul("DIARY " + mc.nama);
-    if(!headDiary) {
-        cout << "  Belum ada entry diary.\n";
-        pauseScreen();
-        return;
+    // Skip prolog narration (but not on first run, and not for chapter 0)
+    if (skipProlog && s->id == 0 && resetCount == 0) {
+        // first time — show full
     }
-    DiaryNode* cur = headDiary;
-    while(cur) {
-        cout << "\033[1;93m[" << cur->id << "] " << cur->judul << "\033[0m";
-        cout << " \033[90m(" << cur->tanggal << ")\033[0m\n";
-        cout << "  \033[37m" << cur->isi << "\033[0m\n\n";
-        cur = cur->next;
-    }
-    pauseScreen();
-}
 
-void tampilDiaryTerbalik() {
-    printJudul("DIARY (Terbalik - Terbaru ke Lama)");
-    if(!tailDiary) {
-        cout << "  Belum ada entry diary.\n";
-        pauseScreen();
-        return;
+    // Show narration
+    if (!s->narration.empty()) {
+        cout << "\n" << s->narration << "\n";
     }
-    DiaryNode* cur = tailDiary;
-    while(cur) {
-        cout << "\033[1;93m[" << cur->id << "] " << cur->judul << "\033[0m";
-        cout << " \033[90m(" << cur->tanggal << ")\033[0m\n";
-        cout << "  \033[37m" << cur->isi << "\033[0m\n\n";
-        cur = cur->prev;
-    }
-    pauseScreen();
-}
 
-void ubahDiary(int id) {
-    DiaryNode* cur = headDiary;
-    while(cur) {
-        if(cur->id == id) {
-            cout << "  Judul baru (kosongkan untuk tidak diubah): ";
-            string jBaru;
-            cin.ignore();
-            getline(cin, jBaru);
-            if(jBaru != "") cur->judul = jBaru;
-            
-            cout << "  Isi baru (kosongkan untuk tidak diubah): ";
-            string iBaru;
-            getline(cin, iBaru);
-            if(iBaru != "") cur->isi = iBaru;
-            
-            printInfo("Diary berhasil diubah!");
-            return;
-        }
-        cur = cur->next;
-    }
-    printSistem("Entry tidak ditemukan!");
-}
-
-void hapusDiary(int id) {
-    DiaryNode* cur = headDiary;
-    while(cur) {
-        if(cur->id == id) {
-            if(cur->prev) cur->prev->next = cur->next;
-            else headDiary = cur->next;
-            
-            if(cur->next) cur->next->prev = cur->prev;
-            else tailDiary = cur->prev;
-            
-            delete cur;
-            printInfo("Entry diary berhasil dihapus!");
-            return;
-        }
-        cur = cur->next;
-    }
-    printSistem("Entry tidak ditemukan!");
-}
-
-void menuDiary() {
-    while(true) {
-        printJudul("MENU DIARY");
-        cout << "  1. Lihat semua diary\n";
-        cout << "  2. Lihat diary (terbaru ke lama)\n";
-        cout << "  3. Tambah entry baru\n";
-        cout << "  4. Ubah entry\n";
-        cout << "  5. Hapus entry\n";
-        cout << "  0. Kembali\n\n";
-        cout << "  Pilih: ";
-        
-        int pilih;
-        cin >> pilih;
-        
-        switch(pilih) {
-            case 1: tampilSemuaDiary(); break;
-            case 2: tampilDiaryTerbalik(); break;
-            case 3: {
-                clearScreen();
-                printJudul("TULIS DIARY BARU");
-                cin.ignore();
-                cout << "  Tanggal: ";
-                string tgl; getline(cin, tgl);
-                cout << "  Judul: ";
-                string judul; getline(cin, judul);
-                cout << "  Isi: ";
-                string isi; getline(cin, isi);
-                tambahDiary(tgl, judul, isi);
-                pauseScreen();
-                break;
-            }
-            case 4: {
-                tampilSemuaDiary();
-                cout << "  ID entry yang ingin diubah: ";
-                int id; cin >> id;
-                ubahDiary(id);
-                pauseScreen();
-                break;
-            }
-            case 5: {
-                tampilSemuaDiary();
-                cout << "  ID entry yang ingin dihapus: ";
-                int id; cin >> id;
-                hapusDiary(id);
-                pauseScreen();
-                break;
-            }
-            case 0: return;
-            default: printSistem("Pilihan tidak valid!"); pauseScreen();
-        }
+    // Show dialogs via Queue
+    if (!s->dialogs.empty()) {
+        printLine();
+        displayDialogQueue(s->dialogs);
+        printLine();
     }
 }
 
 // ============================================================
-// STACK: History Pilihan
+// DISPLAY CHOICES
 // ============================================================
 
-void simpanHistory(string pilihan) {
-    historyPilihan.push(pilihan);
-}
+int displayChoices(Scene* s) {
+    if (s->choiceCount == 0) return 0;
 
-void resetHistory() {
-    while(!historyPilihan.empty()) historyPilihan.pop();
-    printSistem("Waktu berbalik... kamu kembali ke awal chapter.");
-}
-
-void tampilHistory() {
-    if(historyPilihan.empty()) {
-        cout << "  Belum ada history pilihan.\n";
-        return;
+    cout << "\n--- Pilih Tindakanmu ---\n";
+    for (int i = 0; i < s->choiceCount; i++) {
+        cout << "  " << (i + 1) << ". " << s->choices[i].text << "\n";
     }
-    stack<string> temp = historyPilihan;
-    stack<string> reversed;
-    while(!temp.empty()) {
-        reversed.push(temp.top());
-        temp.pop();
-    }
-    cout << "  \033[90mHistory pilihan kamu:\033[0m\n";
-    int i = 1;
-    while(!reversed.empty()) {
-        cout << "    " << i++ << ". " << reversed.top() << "\n";
-        reversed.pop();
-    }
+    return getChoice(s->choiceCount);
 }
 
 // ============================================================
-// TREE: Decision Tree untuk pilihan story
+// DISPLAY RESET
 // ============================================================
 
-TreeNode* buatTreeNode(string pertanyaan, int sceneBenar, int sceneSalah) {
-    TreeNode* node = new TreeNode();
-    node->pertanyaan = pertanyaan;
-    node->sceneBenar = sceneBenar;
-    node->sceneSalah = sceneSalah;
-    return node;
-}
+void displayReset(int resetCount) {
+    printSeparator();
+    cout << "\n  ...waktu berhenti.\n\n";
+    cout << "  Dunia di sekitarmu retak seperti kaca.\n";
+    cout << "  Dan kemudian semuanya ditarik kembali —\n";
+    cout << "  ke titik di mana semuanya dimulai.\n";
+    printSeparator();
 
-void tambahPilihanTree(TreeNode* node, string pilihan, bool benar) {
-    node->pilihan[node->jumlahPilihan] = pilihan;
-    node->benar[node->jumlahPilihan] = benar;
-    node->jumlahPilihan++;
-}
+    pressEnter();
 
-// Returns true jika jawaban benar
-bool prosesTree(TreeNode* node) {
-    if(!node) return true;
-    
-    cout << "\n\033[1;95m? " << node->pertanyaan << "\033[0m\n\n";
-    for(int i = 0; i < node->jumlahPilihan; i++) {
-        cout << "  " << (i+1) << ". " << node->pilihan[i] << "\n";
-    }
-    cout << "\n  Pilih (1-" << node->jumlahPilihan << "): ";
-    
-    int pilih;
-    cin >> pilih;
-    
-    if(pilih < 1 || pilih > node->jumlahPilihan) {
-        printSistem("Pilihan tidak valid!");
-        return prosesTree(node);
-    }
-    
-    string pilihanTeks = node->pilihan[pilih-1];
-    simpanHistory(pilihanTeks);
-    
-    if(node->benar[pilih-1]) {
-        printInfo("Sesuatu dalam benakmu terasa... benar.");
-        return true;
-    } else {
-        printSistem("Kamu merasa sesuatu yang salah... dunia mulai berputar.");
-        return false;
-    }
+    printSeparator();
+    cout << "\n  [ RESET #" << resetCount << " ]\n\n";
+
+    // Get monolog based on reset count
+    int idx = (resetCount - 1);
+    if (idx >= RESET_MONOLOG_COUNT) idx = RESET_MONOLOG_COUNT - 1;
+    cout << resetMonologs[idx] << "\n";
+    printSeparator();
+
+    pressEnter();
 }
 
 // ============================================================
-// INPUT NAMA KARAKTER
+// DISPLAY ENDING
 // ============================================================
 
-void inputNamaKarakter() {
-    printJudul("INISIALISASI KARAKTER");
-    
-    cout << "  Sebelum cerita dimulai, siapakah namamu?\n\n";
-    cout << "  Nama karakter utama (MC): ";
-    cin.ignore();
-    getline(cin, mc.nama);
-    if(mc.nama.empty()) mc.nama = "Ryo";
-    
-    cout << "\n  Dan siapakah nama tetangga kamarmu di kost?\n";
-    cout << "  (Karakter yang akan kamu temui di dunia lain)\n\n";
-    cout << "  Nama karakter femboy: ";
-    getline(cin, femboy.nama);
-    if(femboy.nama.empty()) femboy.nama = "Haru";
-    
-    mc.deskripsi = "Seorang mahasiswa baru, otaku sejati pecinta manga.";
-    mc.relationship = 0;
-    
-    femboy.deskripsi = "Berambut panjang, kulit mulus, style androgynous yang unik.";
-    femboy.relationship = 0;
-    femboy.terungkap = false;
-    
-    printInfo("Karakter berhasil dibuat!");
-    cout << "\n  MC     : \033[1;96m" << mc.nama << "\033[0m\n";
-    cout << "  Femboy : \033[1;95m" << femboy.nama << "\033[0m\n\n";
-    pauseScreen();
+void displayEnding(Scene* s) {
+    printSeparator();
+    cout << "\n  " << s->title << "\n";
+    printSeparator();
+    cout << "\n" << s->narration << "\n";
+    printSeparator();
+    cout << "\n  Terima kasih sudah memainkan MANGA RESET: Dunia yang Kulupa.\n\n";
 }
 
 // ============================================================
-// PROLOG: DUNIA NYATA
-// ============================================================
-
-void prolog() {
-    printJudul("PROLOG - Dunia yang Biasa-Biasa Saja");
-    
-    DialogQueue dq;
-    dq.tambah("", "Hari Sabtu. Langit cerah, angin sepoi-sepoi.");
-    dq.tambah("", "Toko manga langgananmu sudah buka. Kau sudah menunggu rilisan terbaru ini sejak tiga minggu lalu.");
-    dq.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq2;
-    dq2.tambah(mc.nama, "Akhirnya... edisi spesial! Langsung beli dua sekalian.");
-    dq2.tambah("Penjaga Toko", "Hati-hati di jalan, dek. Lagi banyak motor ngebut.");
-    dq2.tambah(mc.nama, "Iya, makasih!");
-    dq2.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Kamu berjalan pulang sambil sesekali mengintip cover manga barumu.");
-    printNarasi("Judulnya: 'Layar Lain' - kisah slice of life tentang seorang maba dan tetangga kostnya.");
-    cout << "\n";
-    
-    DialogQueue dq3;
-    dq3.tambah(mc.nama, "*bergumam* Wah, covernya bagus banget... karakternya juga...");
-    dq3.tambah("", "Kau terlalu fokus pada manga di tanganmu.");
-    dq3.tambah("", "Terlalu fokus, sampai tidak mendengar suara klakson dari tikungan.");
-    dq3.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printTruk();
-    
-    cout << "\033[1;91m";
-    animasiKetik("                 BRAAAAKK!!!");
-    cout << "\033[0m\n";
-    
-    DialogQueue dq4;
-    dq4.tambah("", "Rasa sakit yang luar biasa. Manga-mu terlempar jauh.");
-    dq4.tambah("", "Pandanganmu menggelap...");
-    dq4.tambah("", "Dan yang terakhir kau ingat adalah wajah di cover manga itu.");
-    dq4.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris('*');
-    printStar();
-    cout << "\n";
-    printNarasi("                    G E L A P");
-    cout << "\n";
-    printNarasi("        kemudian... sebuah suara...");
-    cout << "\n";
-    printStar();
-    printGaris('*');
-    pauseScreen();
-    
-    clearScreen();
-    printJudul("SELAMAT DATANG DI DUNIA LAIN");
-    
-    DialogQueue dq5;
-    dq5.tambah("???", "...Hei. Hei! Kamu baik-baik aja?");
-    dq5.tambah("", "Kamu membuka mata perlahan.");
-    dq5.tambah("", "Langit-langit yang asing. Bau kayu dan kain yang tidak familiar.");
-    dq5.tambah("", "Dan di atasmu... wajah seseorang.");
-    dq5.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Rambut panjang tergerai. Mata bening menatapmu khawatir.");
-    printNarasi("Wajah itu... familiar. Sangat familiar.");
-    printNarasi("Seperti yang pernah kau lihat di suatu tempat...");
-    cout << "\n";
-    
-    DialogQueue dq6;
-    dq6.tambah(femboy.nama, "Eh, syukurlah. Kamu pingsan di depan kamarku tadi.");
-    dq6.tambah(mc.nama, "*dalam hati* Ini... ini 'kan " + femboy.nama + "! Karakter di manga!");
-    dq6.tambah(mc.nama, "*dalam hati* Berarti aku... masuk ke dalam cerita itu?!");
-    dq6.tambah(femboy.nama, "Hei, kamu kenapa malah diem? Kepalamu kebentur ya?");
-    dq6.tambah(mc.nama, "A-ah, nggak apa-apa! Aku... aku cuma sedikit pusing.");
-    dq6.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Kamu mencoba mengingat-ingat isi manga 'Layar Lain' yang baru saja kamu beli.");
-    printNarasi("Tapi kamu belum sempat membacanya sampai habis...");
-    printNarasi("Kamu hanya ingat garis besar ceritanya.");
-    cout << "\n";
-    
-    printSistem("PERHATIAN DARI KESADARAN DALAM DIRIMU");
-    cout << "\n";
-    cout << "  \033[93mKamu berada di dalam manga 'Layar Lain'.\033[0m\n";
-    cout << "  \033[93mKamu harus menjalankan cerita sesuai alur yang benar.\033[0m\n";
-    cout << "  \033[93mJika kamu salah memilih, waktu akan berbalik ke awal chapter.\033[0m\n";
-    cout << "  \033[93mIngatlah setiap pilihanmu. Kamu pasti bisa.\033[0m\n\n";
-    
-    pauseScreen();
-    
-    // Tambah diary otomatis pertama
-    tambahDiary("Hari 1", "Apa yang terjadi padaku?", 
-        "Aku tertabrak truk dan entah bagaimana aku masuk ke dalam manga. Aku harus menjalankan cerita ini dengan benar. " + femboy.nama + " ada di sini. Dia... persis seperti di cover.");
-}
-
-// ============================================================
-// CHAPTER 1
-// ============================================================
-
-bool chapter1() {
-    resetHistory();
-    chapterSaatIni = 1;
-    
-    printJudul("CHAPTER 1 - Tetangga Kamar");
-    
-    DialogQueue dq;
-    dq.tambah("", "Kamu 'resmi' menjadi penghuni kamar 7, tepat di sebelah kamar " + femboy.nama + ".");
-    dq.tambah("", "Hari pertama kuliah. Kamu berjalan menuju kampus bersamanya karena kalian satu jurusan.");
-    dq.tambah(femboy.nama, "Eh, kamu jurusan apa?");
-    dq.tambah(mc.nama, "Informatika. Kamu?");
-    dq.tambah(femboy.nama, "Sama dong! Wah, lumayan ada yang bisa diajak nebeng ngerjain tugas.");
-    dq.tambah(mc.nama, "*dalam hati* Dia... ramah banget. Nggak nyangka.");
-    dq.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Di tengah perjalanan, " + femboy.nama + " tersandung.");
-    cout << "\n";
-    
-    // DECISION TREE - Chapter 1
-    TreeNode* root = buatTreeNode(
-        "Apa yang kamu lakukan saat " + femboy.nama + " tersandung?",
-        2, 1
-    );
-    tambahPilihanTree(root, "Langsung membantu dan menanyakan apakah ia baik-baik saja", true);
-    tambahPilihanTree(root, "Berpura-pura tidak melihat dan terus berjalan", false);
-    tambahPilihanTree(root, "Tertawa dan mengatakan ia ceroboh", false);
-    
-    bool benar = prosesTree(root);
-    delete root;
-    
-    if(!benar) {
-        cout << "\n";
-        printNarasi(femboy.nama + " menatapmu dengan ekspresi terluka.");
-        printNarasi("Kamu merasa sesuatu yang salah. Ini bukan bagaimana ceritanya seharusnya berjalan...");
-        cout << "\n";
-        pauseScreen();
-        return false;
-    }
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq2;
-    dq2.tambah(mc.nama, "Eh, kamu baik-baik aja? Hati-hati.");
-    dq2.tambah(femboy.nama, "Aduh... iya, makasih. Kamu baik ya.");
-    dq2.tambah("", femboy.nama + " tersenyum tipis. Ada sesuatu yang hangat dari senyum itu.");
-    dq2.tambah(mc.nama, "*dalam hati* Tunggu... manga ini alurnya benar. Aku ingat scene ini!");
-    dq2.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Sesampainya di kampus, kalian berkenalan lebih jauh.");
-    cout << "\n";
-    
-    TreeNode* root2 = buatTreeNode(
-        "Teman sekelas bertanya: 'Siapa temenmu yang cantik itu?'. Kamu menjawab...",
-        2, 1
-    );
-    tambahPilihanTree(root2, "Memperkenalkan " + femboy.nama + " dengan sopan", true);
-    tambahPilihanTree(root2, "Bilang 'Nggak kenal' lalu pergi", false);
-    tambahPilihanTree(root2, "Jawab dengan malu-malu tanpa memperkenalkan", false);
-    
-    bool benar2 = prosesTree(root2);
-    delete root2;
-    
-    if(!benar2) {
-        clearScreen();
-        printNarasi(femboy.nama + " tampak sedikit kecewa mendengar responmu.");
-        printNarasi("Sesuatu terasa tidak pas. Waktu berputar kembali...");
-        pauseScreen();
-        return false;
-    }
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq3;
-    dq3.tambah(mc.nama, "Ini " + femboy.nama + ", teman sekost sekaligus teman sekelas.");
-    dq3.tambah(femboy.nama, "Hai~ Makasih ya udah diperkenalkan.");
-    dq3.tambah("", "Hari pertama berjalan lancar. Kamu dan " + femboy.nama + " pulang bersama.");
-    dq3.tambah(femboy.nama, "Eh, tadi kenapa kamu mau bantuin aku pas jatuh? Biasanya orang lewat aja.");
-    dq3.tambah(mc.nama, "Ya... wajar aja kan bantu orang yang kesusahan.");
-    dq3.tambah(femboy.nama, "Hehe... kamu aneh. Tapi anehnya yang menyenangkan.");
-    dq3.jalankan();
-    
-    femboy.relationship += 20;
-    mc.relationship += 10;
-    
-    cout << "\n";
-    printInfo("Hubunganmu dengan " + femboy.nama + " semakin dekat! [Relationship: " + to_string(femboy.relationship) + "/100]");
-    cout << "\n";
-    
-    tambahDiary("Hari 3", "Dia lebih menarik dari yang kukira",
-        femboy.nama + " orangnya ternyata ramah. Cara dia senyum itu... aneh, tapi aku suka. Bukan dalam artian apa-apa. Cuma... menyenangkan aja.");
-    
-    pauseScreen();
-    
-    ChapterNode* ch = cariChapter(1);
-    if(ch) ch->sudahClear = true;
-    totalChapterClear++;
-    
-    printInfo("CHAPTER 1 CLEAR!");
-    pauseScreen();
-    return true;
-}
-
-// ============================================================
-// CHAPTER 2
-// ============================================================
-
-bool chapter2() {
-    resetHistory();
-    chapterSaatIni = 2;
-    
-    printJudul("CHAPTER 2 - Hujan dan Rahasia Kecil");
-    
-    DialogQueue dq;
-    dq.tambah("", "Dua minggu berlalu. Kamu dan " + femboy.nama + " sudah cukup sering menghabiskan waktu bersama.");
-    dq.tambah("", "Hari ini hujan deras. Kamu lupa bawa payung.");
-    dq.tambah(femboy.nama, "Eh, kamu nggak bawa payung?");
-    dq.tambah(mc.nama, "Lupa...");
-    dq.tambah(femboy.nama, "Sini, bareng aku aja. Payungku cukup buat berdua.");
-    dq.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Di bawah satu payung, kalian berjalan berdampingan.");
-    printNarasi("Jarak yang sangat dekat. Kamu bisa mencium aroma shampoo-nya.");
-    cout << "\n";
-    
-    TreeNode* root = buatTreeNode(
-        "Di bawah payung yang sempit, kamu merasa canggung. Kamu...",
-        3, 2
-    );
-    tambahPilihanTree(root, "Berjalan natural dan mengajak mengobrol supaya tidak canggung", true);
-    tambahPilihanTree(root, "Menjaga jarak ekstra sampai kamu malah hampir basah", false);
-    tambahPilihanTree(root, "Tiba-tiba lari meninggalkan " + femboy.nama + " sendirian", false);
-    
-    bool benar = prosesTree(root);
-    delete root;
-    
-    if(!benar) {
-        clearScreen();
-        printNarasi("Situasi menjadi canggung. " + femboy.nama + " terlihat sedikit kecewa.");
-        printNarasi("Ini bukan alur yang benar. Waktu berbalik...");
-        pauseScreen();
-        return false;
-    }
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq2;
-    dq2.tambah(mc.nama, "Eh, ngomong-ngomong, kamu suka musik apa?");
-    dq2.tambah(femboy.nama, "Hmm... banyak sih. Tapi aku paling suka lo-fi sama jazz.");
-    dq2.tambah(mc.nama, "Oh serius? Aku juga!");
-    dq2.tambah(femboy.nama, "Haha, cocok dong kita.");
-    dq2.tambah("", "Kalian mengobrol ringan sepanjang jalan. Tanpa terasa, sudah sampai di kost.");
-    dq2.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    printNarasi("Di depan kamar masing-masing, " + femboy.nama + " berhenti.");
-    cout << "\n";
-    
-    DialogQueue dq3;
-    dq3.tambah(femboy.nama, "Eh... boleh aku tanya sesuatu?");
-    dq3.tambah(mc.nama, "Boleh, apa?");
-    dq3.tambah(femboy.nama, "Kamu... nggak aneh ya sama aku? Maksudnya, cara aku berpakaian, cara aku ngomong...");
-    dq3.tambah("", "Ada nada ragu dalam suaranya. Pertanyaan yang serius.");
-    dq3.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    TreeNode* root2 = buatTreeNode(
-        femboy.nama + " bertanya apakah kamu merasa aneh dengannya. Jawabanmu...",
-        3, 2
-    );
-    tambahPilihanTree(root2, "Bilang jujur bahwa kamu tidak merasa aneh, dia menyenangkan", true);
-    tambahPilihanTree(root2, "Bilang 'Sedikit sih...' dengan nada ragu", false);
-    tambahPilihanTree(root2, "Ganti topik pembicaraan tanpa menjawab", false);
-    
-    bool benar2 = prosesTree(root2);
-    delete root2;
-    
-    if(!benar2) {
-        clearScreen();
-        printNarasi(femboy.nama + " mengangguk pelan. Tapi matanya tampak sedikit redup.");
-        printNarasi("Kamu merasa sesuatu yang salah... waktu berputar kembali.");
-        pauseScreen();
-        return false;
-    }
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq4;
-    dq4.tambah(mc.nama, "Aneh gimana? Kamu biasa aja. Malah menyenangkan.");
-    dq4.tambah(femboy.nama, "...");
-    dq4.tambah(femboy.nama, "Makasih. Serius.");
-    dq4.tambah("", "Dia tersenyum. Kali ini lebih lebar dari biasanya. Dan ada sesuatu di matanya.");
-    dq4.tambah("", "Kelegaan? Atau mungkin... sesuatu yang lain.");
-    dq4.jalankan();
-    
-    femboy.relationship += 25;
-    
-    cout << "\n";
-    printInfo("Hubunganmu dengan " + femboy.nama + " semakin dalam! [Relationship: " + to_string(femboy.relationship) + "/100]");
-    cout << "\n";
-    
-    tambahDiary("Hari 17", "Pertanyaan yang tidak kuduga",
-        femboy.nama + " tanya apakah aku merasa aneh dengannya. Kenapa dia tanya itu? Ada sesuatu yang dia sembunyikan? Tapi... aku jawab jujur. Karena memang itu kebenarannya.");
-    
-    pauseScreen();
-    
-    ChapterNode* ch = cariChapter(2);
-    if(ch) ch->sudahClear = true;
-    totalChapterClear++;
-    
-    printInfo("CHAPTER 2 CLEAR!");
-    pauseScreen();
-    return true;
-}
-
-// ============================================================
-// CHAPTER 3
-// ============================================================
-
-bool chapter3() {
-    resetHistory();
-    chapterSaatIni = 3;
-    
-    printJudul("CHAPTER 3 - Yang Tersembunyi");
-    
-    DialogQueue dq;
-    dq.tambah("", "Satu bulan di kost. Kamu dan " + femboy.nama + " sudah seperti sahabat lama.");
-    dq.tambah("", "Suatu sore, kamu mendengar suara tangis pelan dari kamar sebelah.");
-    dq.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    TreeNode* root = buatTreeNode(
-        "Kamu mendengar suara tangis dari kamar " + femboy.nama + ". Kamu...",
-        4, 3
-    );
-    tambahPilihanTree(root, "Mengetuk pintunya dengan lembut dan bertanya apakah dia baik-baik saja", true);
-    tambahPilihanTree(root, "Berpura-pura tidak mendengar dan masuk ke kamarmu", false);
-    tambahPilihanTree(root, "Langsung membuka pintu tanpa mengetuk", false);
-    
-    bool benar = prosesTree(root);
-    delete root;
-    
-    if(!benar) {
-        clearScreen();
-        printNarasi("Malam itu berlalu tanpa kamu berbuat apa-apa.");
-        printNarasi("Keesokan harinya, " + femboy.nama + " tampak menjaga jarak.");
-        printNarasi("Ini bukan alur yang benar... waktu berputar.");
-        pauseScreen();
-        return false;
-    }
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq2;
-    dq2.tambah("", "Hening sejenak. Lalu suara tangis berhenti.");
-    dq2.tambah(femboy.nama, "*suara serak* ...Masuk aja.");
-    dq2.tambah("", "Kamu membuka pintu perlahan.");
-    dq2.tambah("", femboy.nama + " duduk di sudut kasur, lutut dipeluk, mata sedikit merah.");
-    dq2.tambah(mc.nama, "Eh, kenapa? Ada yang terjadi?");
-    dq2.tambah(femboy.nama, "...Keluarga. Mereka nelpon. Seperti biasa.");
-    dq2.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq3;
-    dq3.tambah(femboy.nama, "Mereka... nggak terlalu suka cara aku jadi diri sendiri.");
-    dq3.tambah("", "Ada jeda panjang.");
-    dq3.tambah(femboy.nama, "Kamu pasti tau kan, aku ini... bukan perempuan.");
-    dq3.tambah("", "Kamu membeku.");
-    dq3.tambah("", "*dalam hati* Ini... moment pengungkapan. Aku ingat scene ini di manga.");
-    dq3.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    femboy.terungkap = true;
-    
-    TreeNode* root2 = buatTreeNode(
-        femboy.nama + " mengungkapkan identitasnya padamu. Reaksimu...",
-        4, 3
-    );
-    tambahPilihanTree(root2, "Mengangguk pelan dan bilang 'Aku tau. Dan itu nggak mengubah apapun.'", true);
-    tambahPilihanTree(root2, "Terkejut berlebihan dan langsung berdiri", false);
-    tambahPilihanTree(root2, "Terdiam lama tanpa berkata apa-apa sampai dia salah paham", false);
-    
-    bool benar2 = prosesTree(root2);
-    delete root2;
-    
-    if(!benar2) {
-        clearScreen();
-        printNarasi(femboy.nama + " menunduk. Ekspresinya... hancur.");
-        printNarasi("Seharusnya bukan ini reaksimu. Waktu berputar kembali...");
-        pauseScreen();
-        return false;
-    }
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq4;
-    dq4.tambah(mc.nama, "Aku tau. Dan itu nggak mengubah apapun.");
-    dq4.tambah(femboy.nama, "...Kamu nggak kaget?");
-    dq4.tambah(mc.nama, "Kaget sih. Tapi... kamu tetap " + femboy.nama + " yang sama. Yang nemenin aku nebeng payung. Yang suka lo-fi.");
-    dq4.tambah(femboy.nama, "...");
-    dq4.tambah(femboy.nama, "*berbisik* Bego banget sih kamu. Kok bisa segampang itu nerima.");
-    dq4.tambah(mc.nama, "Emang kenapa? Susah ya?");
-    dq4.tambah(femboy.nama, "*ketawa kecil di tengah tangis* Idiot.");
-    dq4.jalankan();
-    
-    femboy.relationship += 30;
-    
-    cout << "\n";
-    printInfo("Kepercayaan " + femboy.nama + " padamu mencapai puncaknya! [Relationship: " + to_string(femboy.relationship) + "/100]");
-    cout << "\n";
-    
-    tambahDiary("Hari 32", "Pengakuan",
-        femboy.nama + " akhirnya bilang. Dia bukan perempuan. Aku... aku nggak tau harus merasa apa. Tapi yang aku tau, aku nggak mau kehilangan dia sebagai teman. Atau lebih dari itu?");
-    
-    pauseScreen();
-    
-    ChapterNode* ch = cariChapter(3);
-    if(ch) ch->sudahClear = true;
-    totalChapterClear++;
-    
-    printInfo("CHAPTER 3 CLEAR!");
-    pauseScreen();
-    return true;
-}
-
-// ============================================================
-// CHAPTER 4 - FINAL
-// ============================================================
-
-bool chapter4() {
-    resetHistory();
-    chapterSaatIni = 4;
-    
-    printJudul("CHAPTER 4 - Pilihan");
-    
-    DialogQueue dq;
-    dq.tambah("", "Seminggu setelah malam pengakuan itu.");
-    dq.tambah("", "Kamu sudah menyelesaikan cerita 'Layar Lain' sampai di sini.");
-    dq.tambah("", "Tapi ada satu hal yang tersisa. Satu pilihan terakhir.");
-    dq.tambah(femboy.nama, "Eh... boleh aku tanya sesuatu lagi?");
-    dq.tambah(mc.nama, "Boleh, apa?");
-    dq.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    DialogQueue dq2;
-    dq2.tambah(femboy.nama, "Kamu... nggak nyesel kan, udah kenal aku?");
-    dq2.tambah("", "Ada keraguan di matanya. Tapi juga harapan.");
-    dq2.tambah("", "Kamu tahu ini adalah pertanyaan terakhir dalam manga.");
-    dq2.tambah("", "Dan jawabanmu akan menentukan ending cerita ini.");
-    dq2.jalankan();
-    pauseScreen();
-    
-    clearScreen();
-    printGaris();
-    cout << "\n";
-    
-    cout << "\033[1;95mINI ADALAH PILIHAN TERAKHIR.\033[0m\n\n";
-    cout << "  " << femboy.nama << " menunggumu menjawab.\n\n";
-    cout << "  1. \033[92m\"Nggak nyesel. Sama sekali nggak.\"\033[0m\n";
-    cout << "     \033[90m(True Ending - Tetap bersama)\033[0m\n\n";
-    cout << "  2. \033[93m\"Aku... butuh waktu untuk mikir.\"\033[0m\n";
-    cout << "     \033[90m(Normal Ending - Perlu jarak)\033[0m\n\n";
-    cout << "  3. \033[91m\"Maaf, aku rasa aku harus pindah kost.\"\033[0m\n";
-    cout << "     \033[90m(Sad Ending - Pergi)\033[0m\n\n";
-    cout << "  Pilihanmu (1-3): ";
-    
-    int pilih;
-    cin >> pilih;
-    
-    simpanHistory("Pilihan akhir: " + to_string(pilih));
-    
-    clearScreen();
-    
-    if(pilih == 1) {
-        // TRUE ENDING
-        printJudul("TRUE ENDING - Tetap di Sini");
-        printStar();
-        
-        DialogQueue de;
-        de.tambah(mc.nama, "Nggak nyesel. Sama sekali nggak.");
-        de.tambah(femboy.nama, "...");
-        de.tambah(mc.nama, "Justru aku seneng bisa kenal kamu. Dan aku harap kita terus kayak gini.");
-        de.tambah(femboy.nama, "Kayak gini gimana?");
-        de.tambah(mc.nama, "Ya... temen. Temen yang baik. Yang bisa diandalkan. Yang nemenin jalan di bawah hujan.");
-        de.tambah(femboy.nama, "*tertawa* Kamu romantis banget deh ngomonginnya.");
-        de.tambah(mc.nama, "Apanya yang romantis, itu fakta.");
-        de.tambah(femboy.nama, "Idiot.");
-        de.tambah("", "Tapi kali ini, 'idiot' itu terdengar seperti hal yang paling hangat di dunia.");
-        de.jalankan();
-        pauseScreen();
-        
-        clearScreen();
-        printGaris('*');
-        printStar();
-        cout << "\n";
-        printNarasi("  Dan kamu merasa sesuatu menarikmu pulang.");
-        printNarasi("  Seperti benang yang menghubungkan dua dunia.");
-        printNarasi("  Kamu menutup matamu...");
-        cout << "\n";
-        printStar();
-        printGaris('*');
-        pauseScreen();
-        
-        clearScreen();
-        printJudul("EPILOG - DUNIA NYATA");
-        
-        DialogQueue ep;
-        ep.tambah("", "Rumah sakit. Bau antiseptik. Langit-langit putih.");
-        ep.tambah("", "Kamu membuka mata.");
-        ep.tambah("Perawat", "Oh! Dia sadar! Dokter, cepat!");
-        ep.tambah("", "Kamu selamat dari kecelakaan itu.");
-        ep.tambah("", "Di meja samping ranjangmu... manga 'Layar Lain' tergeletak.");
-        ep.tambah("", "Kamu meraihnya dengan tangan yang masih lemah.");
-        ep.tambah("", "Dan di halaman terakhir, ada panel yang belum pernah kamu baca.");
-        ep.tambah("", "Dua karakter. Berdampingan. Dengan kalimat sederhana:");
-        ep.jalankan();
-        pauseScreen();
-        
-        clearScreen();
-        cout << "\n\n";
-        cout << "\033[1;93m";
-        cout << "  ╔══════════════════════════════════════════╗\n";
-        cout << "  ║                                          ║\n";
-        cout << "  ║   'Yang penting bukan kamu siapa.        ║\n";
-        cout << "  ║    Yang penting adalah kamu ada.'        ║\n";
-        cout << "  ║                                          ║\n";
-        cout << "  ╚══════════════════════════════════════════╝\n";
-        cout << "\033[0m\n\n";
-        pauseScreen();
-        
-        gameWin = true;
-        
-    } else if(pilih == 2) {
-        // NORMAL ENDING
-        printJudul("NORMAL ENDING - Jarak yang Jujur");
-        
-        DialogQueue de;
-        de.tambah(mc.nama, "Aku... butuh waktu untuk mikir.");
-        de.tambah(femboy.nama, "..Oh.");
-        de.tambah(mc.nama, "Bukan berarti aku nyesel kenal kamu. Tapi ada banyak hal yang aku perlu proses.");
-        de.tambah(femboy.nama, "Aku ngerti. Wajar.");
-        de.tambah("", femboy.nama + " tersenyum. Tapi lebih kecil dari biasanya.");
-        de.tambah(femboy.nama, "Aku tunggu ya, kalau kamu sudah siap ngobrol lagi.");
-        de.jalankan();
-        pauseScreen();
-        
-        clearScreen();
-        printNarasi("Waktu berlalu. Kalian masih berteman.");
-        printNarasi("Tidak sedekat dulu, tapi tidak juga menjauh.");
-        printNarasi("Kadang jarak itu bukan penghalang. Tapi ruang untuk tumbuh.");
-        cout << "\n";
-        
-        tambahDiary("Hari 40", "Jarak",
-            "Aku bilang butuh waktu. Dan " + femboy.nama + " mengerti. Mungkin itu yang aku suka darinya. Dia tidak memaksakan apapun.");
-        
-        pauseScreen();
-        gameWin = true;
-        
-    } else if(pilih == 3) {
-        // SAD ENDING
-        printJudul("SAD ENDING - Selamat Tinggal");
-        
-        DialogQueue de;
-        de.tambah(mc.nama, "Maaf... aku rasa aku harus pindah kost.");
-        de.tambah(femboy.nama, "...");
-        de.tambah(femboy.nama, "Oh. Oke.");
-        de.tambah("", "Hanya dua kata. Tapi matanya berkata ribuan hal.");
-        de.tambah(mc.nama, "Bukan karena kamu—");
-        de.tambah(femboy.nama, "Nggak usah dijelasin. Aku ngerti.");
-        de.tambah("", "Dan senyum itu. Senyum yang terbiasa menyembunyikan rasa sakit.");
-        de.jalankan();
-        pauseScreen();
-        
-        clearScreen();
-        printNarasi("Seminggu kemudian, kamu pindah.");
-        printNarasi("Kadang kamu masih memikirkan suara tawa di balik dinding tipis itu.");
-        printNarasi("Kadang orang memilih jarak bukan karena benci.");
-        printNarasi("Tapi karena belum siap.");
-        cout << "\n";
-        
-        pauseScreen();
-        gameWin = true;
-        
-    } else {
-        cout << "Pilihan tidak valid. Coba lagi.\n";
-        pauseScreen();
-        return chapter4();
-    }
-    
-    ChapterNode* ch = cariChapter(4);
-    if(ch) ch->sudahClear = true;
-    totalChapterClear++;
-    
-    return true;
-}
-
-// ============================================================
-// INISIALISASI DATA
-// ============================================================
-
-void inisialisasiChapter() {
-    tambahChapter(1, "Tetangga Kamar", "Hari pertama kuliah dan pertemuan awal.");
-    tambahChapter(2, "Hujan dan Rahasia Kecil", "Satu payung, dua orang, satu pertanyaan.");
-    tambahChapter(3, "Yang Tersembunyi", "Malam pengakuan yang mengubah segalanya.");
-    tambahChapter(4, "Pilihan", "Satu pertanyaan terakhir. Satu jawaban yang menentukan.");
-}
-
-// ============================================================
-// MAIN MENU
-// ============================================================
-
-void tampilCredits() {
-    printJudul("CREDITS");
-    cout << "  \033[1;93mLAYAR LAIN: Kisah di Balik Panel\033[0m\n\n";
-    cout << "  Sebuah visual novel terminal berbasis C++\n\n";
-    cout << "  \033[90mStruktur Data yang diimplementasikan:\033[0m\n";
-    cout << "  • Array         - Pilihan dialog & opsi jawaban\n";
-    cout << "  • Struct        - Karakter, Scene, Dialog, Diary\n";
-    cout << "  • Pointer       - Navigasi node & linked list\n";
-    cout << "  • Single LL     - Rantai chapter cerita\n";
-    cout << "  • Double LL     - Sistem diary (traversal dua arah)\n";
-    cout << "  • Stack         - History pilihan per chapter\n";
-    cout << "  • Queue         - Antrian dialog dalam scene\n";
-    cout << "  • Tree          - Decision tree pilihan cerita\n\n";
-    pauseScreen();
-}
-
-void mainMenu() {
-    printJudul("LAYAR LAIN: Kisah di Balik Panel");
-    printStar();
-    cout << "\n";
-    cout << "  \033[93mSeorang otaku. Sebuah manga. Sebuah kecelakaan.\033[0m\n";
-    cout << "  \033[93mDan sebuah dunia yang harus ia selesaikan.\033[0m\n\n";
-    printStar();
-    cout << "\n";
-    cout << "  1. Mulai Perjalanan Baru\n";
-    cout << "  2. Lihat Progress Chapter\n";
-    cout << "  3. Buka Diary\n";
-    cout << "  4. Lihat History Pilihan\n";
-    cout << "  5. Credits\n";
-    cout << "  0. Keluar\n\n";
-    cout << "  Pilih: ";
-}
-
-// ============================================================
-// MAIN
+// MAIN GAME LOOP
 // ============================================================
 
 int main() {
-    clearScreen();
-    
-    // Opening screen
-    printGaris('*');
-    printStar();
+    buildSceneDatabase();
+
+    ChapterList  chapterList;
+    buildChapterList(chapterList);
+
+    DialogHistory history;
+    StateStack    stateStack;
+
+    // Initial game state
+    GameState initialState = {0, 0, false, false};
+    GameState gs           = initialState;
+    stateStack.save(gs);
+
+    // ── Title Screen ─────────────────────────────────────────
+    printSeparator();
     cout << "\n";
-    cout << "\033[1;93m";
-    cout << "     ██╗      █████╗ ██╗   ██╗ █████╗ ██████╗ \n";
-    cout << "     ██║     ██╔══██╗╚██╗ ██╔╝██╔══██╗██╔══██╗\n";
-    cout << "     ██║     ███████║ ╚████╔╝ ███████║██████╔╝\n";
-    cout << "     ██║     ██╔══██║  ╚██╔╝  ██╔══██║██╔══██╗\n";
-    cout << "     ███████╗██║  ██║   ██║   ██║  ██║██║  ██║\n";
-    cout << "     ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝\n";
-    cout << "\033[0m\n";
-    cout << "          \033[1;95mL A I N\033[0m\n\n";
-    cout << "     \033[90mKisah di Balik Panel\033[0m\n\n";
-    printStar();
-    printGaris('*');
-    
-    pauseScreen();
-    
-    // Input nama karakter
-    inputNamaKarakter();
-    
-    // Inisialisasi chapter list
-    inisialisasiChapter();
-    
-    // Prolog
-    prolog();
-    
-    // Main game loop
-    while(!gameOver && !gameWin) {
-        clearScreen();
-        mainMenu();
-        
-        int pilih;
-        cin >> pilih;
-        
-        switch(pilih) {
-            case 1: {
-                // Lanjutkan cerita
-                clearScreen();
-                bool berhasil = true;
-                
-                if(chapterSaatIni == 0 || (cariChapter(1) && !cariChapter(1)->sudahClear)) {
-                    do {
-                        berhasil = chapter1();
-                        if(!berhasil) {
-                            clearScreen();
-                            printSistem("RESET - Kamu kembali ke awal Chapter 1");
-                            pauseScreen();
-                        }
-                    } while(!berhasil);
-                }
-                
-                if(!gameWin && cariChapter(1)->sudahClear && 
-                   cariChapter(2) && !cariChapter(2)->sudahClear) {
-                    do {
-                        berhasil = chapter2();
-                        if(!berhasil) {
-                            clearScreen();
-                            printSistem("RESET - Kamu kembali ke awal Chapter 2");
-                            pauseScreen();
-                        }
-                    } while(!berhasil);
-                }
-                
-                if(!gameWin && cariChapter(2)->sudahClear && 
-                   cariChapter(3) && !cariChapter(3)->sudahClear) {
-                    do {
-                        berhasil = chapter3();
-                        if(!berhasil) {
-                            clearScreen();
-                            printSistem("RESET - Kamu kembali ke awal Chapter 3");
-                            pauseScreen();
-                        }
-                    } while(!berhasil);
-                }
-                
-                if(!gameWin && cariChapter(3)->sudahClear && 
-                   cariChapter(4) && !cariChapter(4)->sudahClear) {
-                    chapter4();
-                }
-                
-                if(gameWin) {
-                    clearScreen();
-                    printJudul("TAMAT");
-                    printStar();
-                    cout << "\n";
-                    cout << "  Terima kasih sudah memainkan \033[1;93mLayar Lain\033[0m.\n\n";
-                    cout << "  \033[90mCerita sudah selesai. Tapi diary-mu masih terbuka.\033[0m\n\n";
-                    printStar();
-                    cout << "\n";
-                    pauseScreen();
-                    gameOver = true;
-                }
-                break;
-            }
-            case 2: tampilProgressChapter(); break;
-            case 3: menuDiary(); break;
-            case 4: {
-                clearScreen();
-                printJudul("HISTORY PILIHAN");
-                tampilHistory();
-                cout << "\n";
-                pauseScreen();
-                break;
-            }
-            case 5: tampilCredits(); break;
-            case 0: 
-                clearScreen();
-                cout << "\n  Sampai jumpa...\n\n";
-                gameOver = true;
-                break;
-            default:
-                printSistem("Pilihan tidak valid!");
-                pauseScreen();
+    cout << "        MANGA RESET: Dunia yang Kulupa\n";
+    cout << "\n";
+    cout << "  Sebuah cerita tentang pilihan, keluarga, dan impian.\n";
+    cout << "  Temukan satu-satunya jalur yang benar.\n";
+    cout << "  Salah pilih — kamu kembali ke awal.\n";
+    cout << "\n";
+    printSeparator();
+
+    pressEnter();
+
+    // ── Game Loop ─────────────────────────────────────────────
+    while (!gs.gameOver) {
+        Scene* current = findScene(gs.currentSceneId);
+        if (!current) {
+            cout << "Error: Scene tidak ditemukan.\n";
+            break;
+        }
+
+        // Display scene
+        displayScene(current, false, gs.resetCount);
+
+        // Ending check
+        if (current->isEnding) {
+            displayEnding(current);
+            gs.gameOver    = true;
+            gs.reachedEnding = true;
+            break;
+        }
+
+        // Prolog: no choice, just continue
+        if (current->choiceCount == 0) {
+            pressEnter();
+            gs.currentSceneId = 1;
+            stateStack.save(gs);
+            continue;
+        }
+
+        // Show progress for non-prolog scenes
+        if (current->id > 0 && current->id < 10) {
+            chapterList.printProgress(current->id);
+        }
+
+        // Get player choice
+        int pick = displayChoices(current);
+        Choice& chosen = current->choices[pick - 1];
+
+        // Record in history
+        string histEntry = "[Scene " + to_string(current->id) + "] " + chosen.text;
+        history.push(histEntry);
+
+        if (chosen.nextSceneId == -1 || !chosen.isCorrect) {
+            // Wrong choice — reset
+            gs.resetCount++;
+            displayReset(gs.resetCount);
+
+            // Restore to initial state
+            gs = initialState;
+            gs.resetCount = stateStack.getInitial().resetCount; 
+            // Actually keep current reset count
+            int savedReset = gs.resetCount;
+            gs = initialState;
+            gs.resetCount = savedReset + 1;
+            // Re-save
+            stateStack.save(gs);
+
+        } else {
+            // Correct — advance
+            gs.currentSceneId = chosen.nextSceneId;
+            stateStack.save(gs);
         }
     }
-    
-    // Cleanup
-    ChapterNode* cur = headChapter;
-    while(cur) {
-        ChapterNode* next = cur->next;
-        delete cur;
-        cur = next;
+
+    // ── Post-game ─────────────────────────────────────────────
+    if (gs.reachedEnding) {
+        cout << "\n  Total reset yang dialami: " << gs.resetCount << " kali.\n\n";
+        if (gs.resetCount > 0) {
+            cout << "  Pilihanmu selama perjalanan:\n";
+            history.printAll();
+        }
     }
-    
-    DiaryNode* dcur = headDiary;
-    while(dcur) {
-        DiaryNode* next = dcur->next;
-        delete dcur;
-        dcur = next;
-    }
-    
+
+    cout << "\n";
+    printSeparator();
+    cout << "  [ Program selesai. ]\n";
+    printSeparator();
+    cout << "\n";
+
     return 0;
 }
