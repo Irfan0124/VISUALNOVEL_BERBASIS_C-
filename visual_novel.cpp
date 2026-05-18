@@ -22,13 +22,9 @@
 
 #include <iostream>
 #include <string>
-#include <vector>
-#include <queue>
-#include <stack>
 #include <cstdlib>
 #include <ctime>
 #include <limits>
-#include <algorithm>
 
 using namespace std;
 
@@ -42,6 +38,16 @@ const int MIN_EVENTS     = 4;
 const int MAX_EVENTS     = 6;
 const int STARTING_POINT = 50;
 const int WIN_POINT      = 100;
+const int STACK_CAPACITY = 30;
+
+const int CHAPTER_COUNT = 3;
+
+// ============================================================
+// GRAPH — Adjacency Matrix & Traversal
+// ============================================================
+
+int chapterAdj[CHAPTER_COUNT][CHAPTER_COUNT]; // adjacency matrix
+int dfsVisited[CHAPTER_COUNT];                // penanda node sudah dikunjungi
 
 // ============================================================
 // STRUCT DEFINITIONS
@@ -173,98 +179,172 @@ struct ActiveEventList {
 // STACK — Save/Restore GameState
 // ============================================================
 
+// ============================================================
+// STACK — Save/Restore GameState (implementasi manual)
+// ============================================================
+
 struct StateStack {
-    stack<GameState> stk;
+    GameState data[STACK_CAPACITY];
+    int top;
+
+    void create() { top = -1; }
+
+    bool isEmpty() { return top == -1; }
+    bool isFull()  { return top == STACK_CAPACITY - 1; }
 
     void save(const GameState& gs) {
-        stk.push(gs);
+        if (!isFull()) {
+            top++;
+            data[top] = gs;
+        }
     }
 
-    // Ambil state awal chapter (bottom of stack untuk chapter ini)
     GameState getChapterInitial() {
-        if (stk.empty()) return {1, STARTING_POINT, 0, false, false};
-        return stk.top();
+        if (isEmpty()) {
+            GameState def = {1, STARTING_POINT, 0, false, false};
+            return def;
+        }
+        return data[top];
     }
 
-    void clear() {
-        while (!stk.empty()) stk.pop();
-    }
+    void clear() { top = -1; }
 };
 
 // ============================================================
-// QUEUE — Display Monolog Restart
+// QUEUE — Display Monolog Restart (implementasi manual)
 // ============================================================
 
-void displayMonologQueue(const vector<string>& lines) {
-    queue<string> q;
-    for (const auto& l : lines) q.push(l);
+const int QUEUE_CAPACITY = 100;
+
+struct MonologQueue {
+    string data[QUEUE_CAPACITY];
+    int    front, rear, count;
+
+    void create() { front = 0; rear = -1; count = 0; }
+
+    bool isEmpty() { return count == 0; }
+    bool isFull()  { return count == QUEUE_CAPACITY; }
+
+    void enqueue(const string& s) {
+        if (!isFull()) {
+            rear = (rear + 1) % QUEUE_CAPACITY;
+            data[rear] = s;
+            count++;
+        }
+    }
+
+    string dequeue() {
+        string s = data[front];
+        front = (front + 1) % QUEUE_CAPACITY;
+        count--;
+        return s;
+    }
+};
+
+void displayMonologQueue(string lines[], int lineCount) {
+    MonologQueue q;
+    q.create();
+
+    for (int i = 0; i < lineCount; i++) q.enqueue(lines[i]);
+
     cout << "\n";
-    while (!q.empty()) {
-        cout << "  " << q.front() << "\n";
-        q.pop();
+    while (!q.isEmpty()) {
+        cout << "  " << q.dequeue() << "\n";
     }
     cout << "\n";
 }
 
 // ============================================================
-// GRAPH — Struktur Chapter
+// GRAPH — Struktur Chapter (Directed Graph)
 // ============================================================
 /*
- *  Directed Graph:
+ *  Node index:
+ *    0 = Chapter 1
+ *    1 = Chapter 2
+ *    2 = Ending (id 99)
  *
- *  [Chapter 1] --( poin >= 100 )--> [Chapter 2] --( poin >= 100 )--> [Ending]
- *       ^                                ^
- *       |                                |
- *  (poin <= 0, restart)           (poin <= 0, restart)
+ *  Edge:
+ *    0 -> 1  (Chapter 1 menang  -> Chapter 2)
+ *    0 -> 0  (Chapter 1 kalah   -> restart Chapter 1)
+ *    1 -> 2  (Chapter 2 menang  -> Ending)
+ *    1 -> 1  (Chapter 2 kalah   -> restart Chapter 2)
  */
 
 struct ChapterNode {
-    int         id;          // 1, 2, atau 99 (ending)
-    string      title;
-    string      setting;
-    int         nextChapterId;   // id chapter berikutnya jika menang
-    int         failChapterId;   // id chapter yang diulang jika kalah
+    int    id;
+    string title;
+    string setting;
+    int    nextChapterId;
+    int    failChapterId;
 };
 
-// Graph chapter disimpan sebagai array of nodes
-const int CHAPTER_COUNT = 3;
 ChapterNode chapterGraph[CHAPTER_COUNT];
 
+void initGraph() {
+    for (int i = 0; i < CHAPTER_COUNT; i++)
+        for (int j = 0; j < CHAPTER_COUNT; j++)
+            chapterAdj[i][j] = 0;
+}
+
+void tambahEdge(int dari, int tujuan) {
+    chapterAdj[dari][tujuan] = 1;
+}
+
+int chapterIdToIndex(int id) {
+    for (int i = 0; i < CHAPTER_COUNT; i++)
+        if (chapterGraph[i].id == id) return i;
+    return -1;
+}
+
+int getNextChapterIndex(int currentIndex) {
+    for (int i = 0; i < CHAPTER_COUNT; i++) {
+        if (chapterAdj[currentIndex][i] == 1 && i != currentIndex)
+            return i;
+    }
+    return -1;
+}
+
 void buildChapterGraph() {
-    chapterGraph[0] = {1, "Chapter 1: Hari Pertama sebagai Haru",
-                       "Pagi hari di rumah keluarga Mizushima", 2, 1};
-    chapterGraph[1] = {2, "Chapter 2: Antara Sekolah dan Impian",
+    chapterGraph[0] = {1,  "Chapter 1: Hari Pertama sebagai Yosef",
+                       "Pagi hari di rumah keluarga Situmorang", 2,  1};
+    chapterGraph[1] = {2,  "Chapter 2: Antara Sekolah dan Impian",
                        "Sekolah dan sepulang sekolah",           99, 2};
     chapterGraph[2] = {99, "Ending: Perjanjian dengan Ayah",
                        "Rumah — malam hari",                     -1, -1};
+
+    initGraph();
+    tambahEdge(0, 1);
+    tambahEdge(0, 0);
+    tambahEdge(1, 2);
+    tambahEdge(1, 1);
 }
 
 ChapterNode* findChapterNode(int id) {
-    for (int i = 0; i < CHAPTER_COUNT; i++) {
+    for (int i = 0; i < CHAPTER_COUNT; i++)
         if (chapterGraph[i].id == id) return &chapterGraph[i];
-    }
     return nullptr;
 }
+
 
 // ============================================================
 // DATA: KARAKTER
 // ============================================================
 
 Character characters[] = {
-    {"Haru Mizushima", "protagonist",
+    {"Yosef Situmorang", "protagonist",
      "Pelajar SMA kelas 3. Pemimpi diam-diam yang ingin jadi content creator."},
-    {"Kenji Mizushima", "npc",
-     "Ayah Haru. Keras, disiplin, tapi menyimpan kepedulian yang dalam."},
-    {"Ibu Mizushima", "npc",
-     "Ibu Haru. Lembut, penengah, sering diam tapi selalu memperhatikan."},
-    {"Hana Mizushima", "npc",
-     "Kakak Haru, 21 tahun. Standar keluarga. Bekerja di perusahaan bagus."},
-    {"Dito", "npc",
-     "Teman sekelas Haru. Santai, sering ngajak main."},
-    {"Nisa", "npc",
-     "Teman sekelas Haru. Energik, update soal tren konten."},
-    {"Kaito", "npc",
-     "Content creator SMA yang menginspirasi Haru."},
+    {"Kejo Situmorang", "npc",
+     "Ayah Yosef. Keras, disiplin, tapi menyimpan kepedulian yang dalam."},
+    {"Arnawati Situmorang", "npc",
+     "Ibu Yosef. Lembut, penengah, sering diam tapi selalu memperhatikan."},
+    {"Hanif Situmorang", "npc",
+     "Kakak Yosef, 21 tahun. Standar keluarga. Bekerja di perusahaan bagus."},
+    {"Akmal", "npc",
+     "Teman sekelas Yosef. Santai, sering ngajak main."},
+    {"Dimas", "npc",
+     "Teman sekelas Yosef. Energik, update soal tren konten."},
+    {"Syarif", "npc",
+     "Content creator SMA yang menginspirasi Yosef."},
 };
 
 // ============================================================
@@ -308,7 +388,7 @@ void buildPoolChapter1() {
     poolChapter1[1] = {
         101, "Sarapan bersama Ayah",
         "Meja makan. Ayah menaruh koran dan menatapmu.\n"
-        "  \"Haru. Nilai ulangan matematika minggu lalu.\"\n"
+        "  \"Yosef. Nilai ulangan matematika minggu lalu.\"\n"
         "  Bukan pertanyaan. Pernyataan. Ia sudah tahu nilaimu: 78.",
         {
             {
@@ -326,7 +406,7 @@ void buildPoolChapter1() {
                 "Berbohong: \"Sudah bagus, di atas rata-rata kelas.\"", -20,
                 "Ayah menatapmu dengan tatapan yang kamu kenal —\n"
                 "  tatapan 'aku sudah tahu'. Ia membuka koran lagi.\n"
-                "  'Bicara yang benar, Haru.'"
+                "  'Bicara yang benar, Yosef.'"
             },
             {
                 "Alihkan topik: \"Ibu, masakannya enak hari ini.\"", -10,
@@ -337,50 +417,50 @@ void buildPoolChapter1() {
         }, 4
     };
 
-    // Event 2: Ngobrol dengan Hana
+    // Event 2: Ngobrol dengan Hanif
     poolChapter1[2] = {
-        102, "Ngobrol dengan Hana (kakak)",
-        "Hana sudah rapi dengan seragam kantornya.\n"
+        102, "Ngobrol dengan Hanif (kakak)",
+        "Hanif sudah rapi dengan seragam kantornya.\n"
         "  Ia menuang kopi sambil berkata pelan:\n"
-        "  \"Haru, Ayah lagi banyak pikiran soal kerjaan.\n"
+        "  \"Yosef, Ayah lagi banyak pikiran soal kerjaan.\n"
         "   Jangan bikin masalah dulu, ya.\"\n\n"
         "  Kamu menatapnya.",
         {
             {
                 "Angguk dan bilang: \"Iya, Kak. Makasih info-nya.\"", +20,
-                "Hana menepuk bahumu pelan. 'Bagus.'\n"
-                "  Hanya satu kata — tapi dari Hana, itu banyak."
+                "Hanif menepuk bahumu pelan. 'Bagus.'\n"
+                "  Hanya satu kata — tapi dari Hanif, itu banyak."
             },
             {
                 "Balik ke kamar tanpa menjawab.", -10,
-                "Hana memanggil namamu sekali, tapi kamu sudah di ujung lorong.\n"
+                "Hanif memanggil namamu sekali, tapi kamu sudah di ujung lorong.\n"
                 "  Kamu dengar helaan napasnya dari dapur."
             },
             {
                 "Tanya balik: \"Emang kenapa, Kak? Cerita dong.\"", +15,
-                "Hana sedikit kaget. Lalu ia duduk dan cerita sebentar\n"
+                "Hanif sedikit kaget. Lalu ia duduk dan cerita sebentar\n"
                 "  soal Ayah yang sedang stres proyek. Kamu menyimak.\n"
                 "  Setidaknya sekarang kamu lebih paham situasinya."
             },
             {
                 "Senyum saja tanpa berkata apa-apa.", +5,
-                "Hana menatapmu sebentar, lalu balik menatap gelasnya.\n"
+                "Hanif menatapmu sebentar, lalu balik menatap gelasnya.\n"
                 "  'Ya sudah. Hati-hati.' Singkat, tapi hangatnya ada."
             },
         }, 4
     };
 
-    // Event 3: Menemukan video Kaito
+    // Event 3: Menemukan video Syarif
     poolChapter1[3] = {
         103, "Buka HP sebelum berangkat",
         "Kamu sempat buka HP sebelum berangkat.\n"
-        "  Notifikasi: Kaito upload video baru.\n"
+        "  Notifikasi: Syarif upload video baru.\n"
         "  Judulnya: 'Cara Aku Mulai dari 0 Subscriber'\n\n"
         "  Ayah ada di ruang sebelah. Waktu 10 menit sebelum berangkat.",
         {
             {
                 "Tonton sebentar — 10 menit cukup untuk highlight-nya.", +15,
-                "Kamu tonton highlight-nya. Ada satu kalimat yang Kaito bilang\n"
+                "Kamu tonton highlight-nya. Ada satu kalimat yang Syarif bilang\n"
                 "  yang langsung kamu catat di memo: 'Konsistensi mengalahkan\n"
                 "  konten sempurna.' Itu sudah cukup untuk hari ini."
             },
@@ -516,15 +596,15 @@ void buildPoolChapter1() {
 
     // Event 7: Telepon teman
     poolChapter1[7] = {
-        107, "Dito telepon mengajak keluar",
-        "HP bergetar. Dito nelpon.\n"
-        "  \"Haru! Nongkrong yuk, ada yang baru buka dekat sekolah.\n"
-        "   Nisa juga ikut. Santai aja, paling sejam.\"\n\n"
+        107, "Akmal telepon mengajak keluar",
+        "HP bergetar. Akmal nelpon.\n"
+        "  \"Yosef! Nongkrong yuk, ada yang baru buka dekat sekolah.\n"
+        "   Dimas juga ikut. Santai aja, paling sejam.\"\n\n"
         "  Ayah ada di rumah.",
         {
             {
                 "Tolak dengan sopan: \"Nggak bisa hari ini, Dit.\"", +20,
-                "Dito bilang 'ya sudah' dengan nada biasa —\n"
+                "Akmal bilang 'ya sudah' dengan nada biasa —\n"
                 "  tidak kecewa, tidak marah. Dan kamu lega.\n"
                 "  Sore ini masih milikmu."
             },
@@ -557,7 +637,7 @@ void buildPoolChapter1() {
         "  Kamu hanya bisa pilih satu.",
         {
             {
-                "Belajar matematika dulu — nilai 78 harus naik.", +20,
+                "Belajar matematika dulu — nilai 78 Yosefs naik.", +20,
                 "Kamu buka bab persamaan kuadrat dan mulai dari soal pertama.\n"
                 "  Tiga puluh menit kemudian, ada sesuatu yang mulai masuk akal.\n"
                 "  Nilai 78 mungkin bukan takdir."
@@ -587,15 +667,15 @@ void buildPoolChapter1() {
     poolChapter1[9] = {
         109, "Momen depan cermin",
         "Kamu berdiri di depan cermin kamar mandi.\n"
-        "  Wajah Haru menatap balik.\n"
+        "  Wajah Yosef menatap balik.\n"
         "  Untuk pertama kali, kamu sadar betapa beratnya hidup\n"
         "  yang sedang kamu jalani — sebagai dirinya.\n\n"
         "  Kamu bicara ke cermin.",
         {
             {
-                "\"Aku bisa. Haru pasti bisa.\" — Ucapkan dengan yakin.", +25,
+                "\"Aku bisa. Yosef pasti bisa.\" — Ucapkan dengan yakin.", +25,
                 "Suaramu gemetar sedikit di awal — tapi makin lama makin kuat.\n"
-                "  Kamu menatap wajah Haru di cermin dan untuk pertama kali,\n"
+                "  Kamu menatap wajah Yosef di cermin dan untuk pertama kali,\n"
                 "  kamu percaya bahwa ia benar-benar bisa."
             },
             {
@@ -605,7 +685,7 @@ void buildPoolChapter1() {
                 "  sepanjang hari."
             },
             {
-                "\"Kenapa hidup ini harus sekeras ini?\" — Keluh.", -10,
+                "\"Kenapa hidup ini Yosefs sekeras ini?\" — Keluh.", -10,
                 "Kata-kata itu keluar begitu saja.\n"
                 "  Dan entah kenapa, setelah diucapkan,\n"
                 "  bebannya tidak berkurang — malah sedikit bertambah."
@@ -642,8 +722,8 @@ void buildPoolChapter2() {
                 "  Itu sudah lebih dari cukup untuk kondisi tidak siap."
             },
             {
-                "Coba lirik jawaban Nisa yang duduk di sebelah.", -25,
-                "Nisa sadar dan menutupi kertasnya. Guru melirik.\n"
+                "Coba lirik jawaban Dimas yang duduk di sebelah.", -25,
+                "Dimas sadar dan menutupi kertasnya. Guru melirik.\n"
                 "  Kamu pura-pura batuk. Jantungmu berdegup\n"
                 "  sampai bel berbunyi — dan hasilnya tetap tidak memuaskan."
             },
@@ -662,30 +742,30 @@ void buildPoolChapter2() {
         }, 4
     };
 
-    // Event 1: Istirahat — Dito ajak nonton live Kaito
+    // Event 1: Istirahat — Akmal ajak nonton live Syarif
     poolChapter2[1] = {
-        201, "Istirahat — Kaito lagi live",
-        "Nisa lari ke mejamu sambil pegang HP.\n"
-        "  \"Haru! Kaito lagi live! Dia lagi bahas cara monetisasi\n"
+        201, "Istirahat — Syarif lagi live",
+        "Dimas lari ke mejamu sambil pegang HP.\n"
+        "  \"Yosef! Syarif lagi live! Dia lagi bahas cara monetisasi\n"
         "   channel kecil. Ini pas banget buat kamu!\"\n\n"
         "  Masih ada 20 menit istirahat.",
         {
             {
                 "Tonton live-nya sebentar — ini ilmu yang berguna.", +20,
                 "Kamu tonton dengan serius, catat tiga poin penting di memo.\n"
-                "  Bel masuk berbunyi tepat saat Kaito mengucapkan kalimat terakhirnya.\n"
+                "  Bel masuk berbunyi tepat saat Syarif mengucapkan kalimat terakhirnya.\n"
                 "  Timing yang sempurna."
             },
             {
-                "Minta Nisa rekam/screenshot bagian pentingnya saja.", +15,
-                "Nisa dengan senang hati screenshot beberapa slide.\n"
+                "Minta Dimas rekam/screenshot bagian pentingnya saja.", +15,
+                "Dimas dengan senang hati screenshot beberapa slide.\n"
                 "  Kamu dapat intinya tanpa kehilangan waktu istirahat.\n"
-                "  Efisien — dan Nisa senang merasa berguna."
+                "  Efisien — dan Dimas senang merasa berguna."
             },
             {
                 "Ignore — fokus review pelajaran untuk jam selanjutnya.", +10,
                 "Kamu buka buku dan review materi.\n"
-                "  Tidak dapat ilmu Kaito hari ini — tapi paling tidak,\n"
+                "  Tidak dapat ilmu Syarif hari ini — tapi paling tidak,\n"
                 "  kamu masuk kelas berikutnya dengan lebih siap."
             },
             {
@@ -700,16 +780,16 @@ void buildPoolChapter2() {
     // Event 2: Guru BK memanggil
     poolChapter2[2] = {
         202, "Dipanggil Guru BK",
-        "\"Haru, masuk sebentar.\"\n\n"
+        "\"Yosef, masuk sebentar.\"\n\n"
         "  Guru BK menutup pintu. Di mejanya ada print-out.\n"
-        "  Nilai Haru semester ini. Rata-rata: 76.\n"
+        "  Nilai Yosef semester ini. Rata-rata: 76.\n"
         "  \"Kamu siswa yang cerdas. Tapi kenapa nilainya segini?\"",
         {
             {
                 "Jujur: \"Aku sedang cari cara seimbangkan semua hal, Bu.\"", +25,
                 "Guru BK diam sejenak. Lalu ia tersenyum —\n"
                 "  bukan senyum kasihan, tapi senyum yang mengerti.\n"
-                "  'Kalau butuh bicara, pintu saya selalu terbuka, Haru.'"
+                "  'Kalau butuh bicara, pintu saya selalu terbuka, Yosef.'"
             },
             {
                 "Diam dan mengangguk saja.", -5,
@@ -725,50 +805,50 @@ void buildPoolChapter2() {
             },
             {
                 "Alihkan: \"Saya tidak tahu, Bu. Mungkin soalnya sulit.\"", -15,
-                "Guru BK menatapmu lama. 'Haru, itu bukan jawaban yang aku cari.'\n"
+                "Guru BK menatapmu lama. 'Yosef, itu bukan jawaban yang aku cari.'\n"
                 "  Kamu tahu — tapi kamu tidak punya jawaban\n"
                 "  yang lebih baik saat itu."
             },
         }, 4
     };
 
-    // Event 3: Nisa tanya soal channel
+    // Event 3: Dimas tanya soal channel
     poolChapter2[3] = {
-        203, "Nisa tanya soal channel YouTube",
-        "Nisa duduk di sebelahmu waktu pulang.\n"
-        "  \"Haru, aku tahu kamu punya channel YouTube.\n"
+        203, "Dimas tanya soal channel YouTube",
+        "Dimas duduk di sebelahmu waktu pulang.\n"
+        "  \"Yosef, aku tahu kamu punya channel YouTube.\n"
         "   Aku nggak sengaja nemu. Videomu... bagus, Har.\n"
         "   Kenapa nggak pernah cerita?\"\n\n"
         "  Jantungmu berdegup.",
         {
             {
                 "Ceritakan semuanya — impian, ketakutan, dan rencana.", +25,
-                "Nisa mendengarkan dengan serius. Matanya tidak menghakimi —\n"
-                "  malah berbinar sedikit. 'Haru... ini keren. Serius.'\n"
+                "Dimas mendengarkan dengan serius. Matanya tidak menghakimi —\n"
+                "  malah berbinar sedikit. 'Yosef... ini keren. Serius.'\n"
                 "  Untuk pertama kali, ada orang yang tahu.\n"
                 "  Dan rasanya tidak seburuk yang kamu bayangkan."
             },
             {
                 "Minta dia diam dan tidak cerita ke siapapun.", -10,
-                "Nisa mengangguk pelan, tapi ada ekspresi di wajahnya\n"
+                "Dimas mengangguk pelan, tapi ada ekspresi di wajahnya\n"
                 "  yang sulit dibaca. Kamu berhasil menutupnya —\n"
                 "  tapi entah untuk berapa lama."
             },
             {
                 "Pura-pura tidak tahu channel yang dimaksud.", -20,
-                "Nisa menatapmu dengan ekspresi terluka.\n"
+                "Dimas menatapmu dengan ekspresi terluka.\n"
                 "  'Aku sudah lihat videonya, Har. Aku nggak bohong.'\n"
                 "  Kamu memalingkan muka — dan jarak itu terasa\n"
                 "  tiba-tiba lebih jauh dari sebelumnya."
             },
             {
                 "Bilang itu cuma iseng, tidak serius.", -5,
-                "Nisa mengangguk. Tapi matanya bilang ia tidak sepenuhnya percaya.\n"
+                "Dimas mengangguk. Tapi matanya bilang ia tidak sepenuhnya percaya.\n"
                 "  Kesempatan untuk terbuka itu lewat begitu saja."
             },
             {
-                "Minta pendapat Nisa soal video-videomu.", +20,
-                "Nisa langsung antusias. Ia buka videomu satu per satu\n"
+                "Minta pendapat Dimas soal video-videomu.", +20,
+                "Dimas langsung antusias. Ia buka videomu satu per satu\n"
                 "  dan kasih komentar jujur. Beberapa kritiknya perih —\n"
                 "  tapi semuanya berguna."
             },
@@ -807,11 +887,11 @@ void buildPoolChapter2() {
         }, 4
     };
 
-    // Event 5: Sore — tawaran kolaborasi dari Kaito
+    // Event 5: Sore — tawaran kolaborasi dari Syarif
     poolChapter2[5] = {
-        205, "DM dari Kaito",
+        205, "DM dari Syarif",
         "HP-mu berbunyi. DM masuk.\n"
-        "  Dari: @KaitoCreates\n"
+        "  Dari: @SyarifCreates\n"
         "  \"Hei, aku nemu channel-mu. Kontenmu raw dan jujur.\n"
         "   Mau kolaborasi video bareng minggu depan?\"\n\n"
         "  Tanganmu gemetar sedikit.",
@@ -824,7 +904,7 @@ void buildPoolChapter2() {
             },
             {
                 "Balas: \"Terima kasih. Boleh aku pikir dulu?\"", +25,
-                "Kaito balas: 'Sure, take your time.'\n"
+                "Syarif balas: 'Sure, take your time.'\n"
                 "  Kamu taruh HP dan menarik napas.\n"
                 "  Kesempatan itu tidak kemana-mana — dan kamu punya waktu\n"
                 "  untuk mempersiapkan diri dengan benar."
@@ -838,7 +918,7 @@ void buildPoolChapter2() {
             {
                 "Balas dan langsung tanya soal teknis kolaborasi.", +15,
                 "Kamu tanya soal platform, durasi, dan topik.\n"
-                "  Kaito terkesan dengan pertanyaan yang spesifik.\n"
+                "  Syarif terkesan dengan pertanyaan yang spesifik.\n"
                 "  'Kamu serius ya. Bagus.' Fondasi yang kuat untuk kolaborasi."
             },
         }, 4
@@ -939,13 +1019,13 @@ void buildPoolChapter2() {
             {
                 "Rekam tapi tidak upload — simpan untuk diri sendiri.", +15,
                 "Kamu rekam dan simpan. Itu untuk dirimu sendiri —\n"
-                "  dan itu cukup. Tidak semua konten harus dilihat orang lain\n"
+                "  dan itu cukup. Tidak semua konten Yosefs dilihat orang lain\n"
                 "  untuk bermakna."
             },
             {
                 "Upload video lama yang sudah diedit.", +5,
                 "Video lama yang sudah diedit itu akhirnya terupload.\n"
-                "  Sederhana, tapi jujur. Kamu tutup laptop\n"
+                "  SederHanif, tapi jujur. Kamu tutup laptop\n"
                 "  dan tidur dengan perasaan yang tidak terlalu berat."
             },
             {
@@ -963,7 +1043,7 @@ void buildPoolChapter2() {
         "Ibu duduk sendiri di dapur pagi-pagi.\n"
         "  Ia memegang cangkir teh.\n"
         "  Saat kamu masuk, ia tersenyum.\n"
-        "  \"Haru, Ibu mau bicara sebentar.\"",
+        "  \"Yosef, Ibu mau bicara sebentar.\"",
         {
             {
                 "Duduk dan dengarkan.", +25,
@@ -988,8 +1068,8 @@ void buildPoolChapter2() {
                 "Tanya duluan: \"Ibu mau bilang apa?\"", +15,
                 "Ibu tersenyum kecil.\n"
                 "  'Ibu mau bilang... Ibu bangga kamu sudah bertahan sejauh ini.'\n"
-                "  Itu saja. Tapi kamu harus tahan napas\n"
-                "  agar tidak terlalu keliatan terharu."
+                "  Itu saja. Tapi kamu Yosefs tahan napas\n"
+                "  agar tidak terlalu keliatan terYosef."
             },
         }, 4
     };
@@ -1005,9 +1085,10 @@ void clearScreen() {
 }
 
 void pressEnter() {
-    cout << "\n  [Tekan ENTER untuk melanjutkan...]";
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-    cin.get();
+    cout << "\n[Tekan ENTER untuk melanjutkan...]";
+
+    string dummy;
+    getline(cin, dummy);
 }
 
 void printSeparator() {
@@ -1032,6 +1113,37 @@ int getInput(int maxVal) {
     }
 }
 
+void dfsGraph(int idx) {
+    dfsVisited[idx] = 1;
+    cout << "  [" << idx << "] " << chapterGraph[idx].title << "\n";
+    for (int i = 0; i < CHAPTER_COUNT; i++) {
+        if (chapterAdj[idx][i] == 1 && !dfsVisited[i]) {
+            cout << "       └─> ";
+            dfsGraph(i);
+        }
+    }
+}
+
+void displayChapterGraph() {
+    printSeparator();
+    cout << "\n  Peta Alur Cerita (Directed Graph — DFS Traversal):\n\n";
+    for (int i = 0; i < CHAPTER_COUNT; i++) dfsVisited[i] = 0;
+    dfsGraph(0);
+
+    cout << "\n  Adjacency Matrix:\n";
+    cout << "       ";
+    for (int i = 0; i < CHAPTER_COUNT; i++) cout << "[" << i << "] ";
+    cout << "\n";
+    for (int i = 0; i < CHAPTER_COUNT; i++) {
+        cout << "  [" << i << "]  ";
+        for (int j = 0; j < CHAPTER_COUNT; j++)
+            cout << " " << chapterAdj[i][j] << "  ";
+        cout << "\n";
+    }
+    printSeparator();
+}
+
+
 // ============================================================
 // MONOLOG RESTART (Array of strings)
 // ============================================================
@@ -1049,13 +1161,13 @@ const string restartMonologs[] = {
     "  Sensasinya seperti ditarik mundur paksa.\n"
     "  Dua kali. Aku sudah gagal dua kali.\n\n"
     "  Tapi aku mulai mengerti polanya.\n"
-    "  Haru butuh keseimbangan — bukan cuma berani, tapi juga bijak.",
+    "  Yosef butuh keseimbangan — bukan cuma berani, tapi juga bijak.",
 
     // restart 3
     "Kali ini tidak ada teriakan.\n\n"
     "  Aku sudah tahu rasanya. Dingin. Gelap. Kembali lagi.\n\n"
     "  Tiga kali. Oke.\n"
-    "  Aku harus berpikir seperti Haru — bukan seperti diri sendiri.\n"
+    "  Aku Yosefs berpikir seperti Yosef — bukan seperti diri sendiri.\n"
     "  Apa yang akan dilakukan seseorang yang mau menang\n"
     "  tanpa kehilangan segalanya?",
 
@@ -1064,7 +1176,7 @@ const string restartMonologs[] = {
     "  Sudah berapa kali ini?\n"
     "  Tapi aku semakin dekat. Aku bisa merasakannya.\n\n"
     "  Kali ini — aku sudah tahu lebih banyak.\n"
-    "  Ayo, Haru. Ayo.",
+    "  Ayo, Yosef. Ayo.",
 };
 const int MONOLOG_COUNT = 4;
 
@@ -1075,24 +1187,25 @@ const int MONOLOG_COUNT = 4;
 void randomPickEvents(Event* pool, int poolSize,
                       int pickMin, int pickMax,
                       ActiveEventList& activeList) {
-    // Buat index array dan shuffle
-    vector<int> indices(poolSize);
+    // Array biasa, bukan vector
+    int indices[POOL_SIZE];
     for (int i = 0; i < poolSize; i++) indices[i] = i;
 
-    // Fisher-Yates shuffle
+    // Fisher-Yates shuffle — swap manual tanpa <algorithm>
     for (int i = poolSize - 1; i > 0; i--) {
         int j = rand() % (i + 1);
-        swap(indices[i], indices[j]);
+        int tmp = indices[i];
+        indices[i] = indices[j];
+        indices[j] = tmp;
     }
 
-    // Tentukan jumlah event yang dipilih
     int pickCount = pickMin + (rand() % (pickMax - pickMin + 1));
 
-    // Insert ke active list (CRUD: Tambah)
     for (int i = 0; i < pickCount; i++) {
         activeList.insertNode(pool[indices[i]]);
     }
 }
+
 
 // ============================================================
 // DISPLAY CHAPTER HEADER
@@ -1113,7 +1226,8 @@ void displayChapterHeader(ChapterNode* cn, int points) {
 
 void displayPointBar(int points) {
     cout << "\n  [Poin: " << points << "/100]  ";
-    int filled = max(0, min(points, 100)) / 5;
+    int clamped = points < 0 ? 0 : (points > 100 ? 100 : points);
+    int filled  = clamped / 5;
     cout << "[";
     for (int i = 0; i < 20; i++) cout << (i < filled ? "#" : "-");
     cout << "]\n";
@@ -1178,25 +1292,32 @@ void displayRestart(int restartCount) {
 
     cout << "\n  [ RESTART #" << restartCount << " ]\n";
 
-    int idx = min(restartCount - 1, MONOLOG_COUNT - 1);
-    vector<string> lines;
-    // Split monolog per baris untuk ditampilkan via Queue
+    int idx = (restartCount - 1 < MONOLOG_COUNT - 1) 
+          ? restartCount - 1 
+          : MONOLOG_COUNT - 1;
+
+    // Array biasa, bukan vector<string>
+    const int MAX_LINES = 50;
+    string lines[MAX_LINES];
+    int    lineCount = 0;
+
     string monolog = restartMonologs[idx];
     string line;
-    for (char c : monolog) {
-        if (c == '\n') {
-            lines.push_back(line);
+    for (int i = 0; i < (int)monolog.size(); i++) {
+        if (monolog[i] == '\n') {
+            if (lineCount < MAX_LINES) lines[lineCount++] = line;
             line.clear();
         } else {
-            line += c;
+            line += monolog[i];
         }
     }
-    if (!line.empty()) lines.push_back(line);
+    if (!line.empty() && lineCount < MAX_LINES) lines[lineCount++] = line;
 
-    // Queue display
-    displayMonologQueue(lines);
+    // Panggil dengan array biasa
+    displayMonologQueue(lines, lineCount);
     pressEnter();
 }
+
 
 // ============================================================
 // DISPLAY ENDING
@@ -1222,11 +1343,11 @@ void displayEnding(int totalRestarts) {
     printLine();
     cout << "\n"
          << "  Enam bulan kemudian:\n"
-         << "  Channel Haru: 8.700 subscriber.\n"
-         << "  Nilai rata-rata Haru: 87.\n\n"
+         << "  Channel Yosef: 8.700 subscriber.\n"
+         << "  Nilai rata-rata Yosef: 87.\n\n"
          << "  Di video terbaru, ada komentar dari akun tanpa foto profil:\n"
          << "  \"Semangat. - Ayah\"\n\n"
-         << "  Haru tidak membalas.\n"
+         << "  Yosef tidak membalas.\n"
          << "  Tapi ia screenshot dan menjadikannya wallpaper.\n\n";
     printSeparator();
     cout << "\n"
@@ -1376,37 +1497,40 @@ int main() {
          << "  Ada poster jadwal pelajaran. Meja belajar penuh buku.\n"
          << "  Satu laptop tua yang sengaja disembunyikan di balik binder.\n\n"
          << "  Di cermin di depanku... bukan wajahku.\n\n"
-         << "  \"Ini... Haru?\"\n\n"
-         << "  Haru Mizushima. MC dari sebuah manga slice of life\n"
+         << "  \"Ini... Yosef?\"\n\n"
+         << "  Yosef Situmorang. MC dari sebuah manga slice of life\n"
          << "  yang aku baca sekitar 5 tahun lalu.\n\n"
          << "  Hidupnya keras. Keluarganya keras.\n"
-         << "  Dan ada cerita yang harus kujalani.\n\n"
+         << "  Dan ada cerita yang Yosefs kujalani.\n\n"
          << "  Semoga aku ingat cukup banyak untuk tidak merusaknya.\n\n";
     pressEnter();
 
-    // ── Game Loop — Graph traversal ──────────────────────────
-    // Mulai dari node Chapter 1 di graph
-    int currentChapterId = 1;
+    // ── Game Loop — Graph traversal via adjacency matrix ─────
+    int currentIndex = 0;   // mulai dari node index 0 (Chapter 1)
 
     while (true) {
-        ChapterNode* cn = findChapterNode(currentChapterId);
-        if (!cn) break;
+        ChapterNode* cn = &chapterGraph[currentIndex];
 
         // Ending node
-        if (currentChapterId == 99) {
+        if (cn->id == 99) {
+            displayChapterGraph();   // tampilkan graph sebelum ending
             displayEnding(gs.restartCount);
             break;
         }
 
         // Pilih pool yang sesuai
-        Event* pool = (currentChapterId == 1) ? poolChapter1 : poolChapter2;
+        Event* pool = (cn->id == 1) ? poolChapter1 : poolChapter2;
 
-        bool won = playChapter(currentChapterId, pool, gs, stateStack);
+        bool won = playChapter(cn->id, pool, gs, stateStack);
 
         if (won) {
-            // Traversal graph: pindah ke node berikutnya
-            currentChapterId = cn->nextChapterId;
+            // Traversal graph: ambil node berikutnya via adjacency matrix
+            int nextIndex = getNextChapterIndex(currentIndex);
+            if (nextIndex == -1) break;
+            currentIndex = nextIndex;
         }
+        // Jika kalah: playChapter sudah handle restart internal,
+        // currentIndex tidak berubah (tetap di chapter yang sama)
     }
 
     printSeparator();
@@ -1416,3 +1540,16 @@ int main() {
 
     return 0;
 }
+
+
+
+
+/*
+Catatan Syarif: 
+
+StateStack masih belum sesuai materi (ada kemungkinan di simplify menjaid data biasa)
+displayMonologQueue masih belum sesuai materi
+
+penggunaan vector sebagai array (kurang tepat dari perspektif dosen) -> perlu diperbaiki menjadi array biasa (dasar)
+
+*/
