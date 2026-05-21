@@ -5,12 +5,11 @@
  * ============================================================
  *  Struktur Data yang Digunakan:
  *  1. Array       : pool event per chapter, array pilihan - Syarif
- *  2. Struct      : Event, Choice, Character, GameState, ChapterNode - Mars
+ *  2. Struct      : Event, Choice, Character, GameState, ChapterNode - Irfan
  *  3. Pointer     : navigasi linked list (EventNode*) - Shauqy
  *  4. Linked List : daftar event aktif per sesi (Single Linked List) - Jefry
- *  5. Stack       : save/restore GameState saat restart - Irfan
- *  6. Queue       : display monolog restart baris per baris - Hakim
- *  7. Graph/Tree  : struktur chapter sebagai directed graph - Irfan
+ *  5. Queue       : display monolog restart baris per baris - Mars
+ *  6. Graph/Tree  : struktur chapter sebagai directed graph - Hakim
  *
  *  CRUD:
  *  - Tampilkan : render event aktif + poin ke layar
@@ -38,7 +37,6 @@ const int MIN_EVENTS     = 4;
 const int MAX_EVENTS     = 6;
 const int STARTING_POINT = 50;
 const int WIN_POINT      = 100;
-const int STACK_CAPACITY = 30;
 
 const int CHAPTER_COUNT = 3;
 
@@ -173,41 +171,6 @@ struct ActiveEventList {
             cur = nxt;
         }
     }
-};
-
-// ============================================================
-// STACK - Save/Restore GameState
-// ============================================================
-
-// ============================================================
-// STACK - Save/Restore GameState (implementasi manual)
-// ============================================================
-
-struct StateStack {
-    GameState data[STACK_CAPACITY];
-    int top;
-
-    void create() { top = -1; }
-
-    bool isEmpty() { return top == -1; }
-    bool isFull()  { return top == STACK_CAPACITY - 1; }
-
-    void save(const GameState& gs) {
-        if (!isFull()) {
-            top++;
-            data[top] = gs;
-        }
-    }
-
-    GameState getChapterInitial() {
-        if (isEmpty()) {
-            GameState def = {1, STARTING_POINT, 0, false, false};
-            return def;
-        }
-        return data[top];
-    }
-
-    void clear() { top = -1; }
 };
 
 // ============================================================
@@ -1364,15 +1327,14 @@ void displayEnding(int totalRestarts) {
 // ============================================================
 // Return: true = lanjut ke chapter berikutnya, false = game selesai
 
-bool playChapter(int chapterId, Event* pool, GameState& gs, StateStack& stateStack) {
+bool playChapter(int chapterId, Event* pool, GameState& gs) {
     ChapterNode* cn = findChapterNode(chapterId);
     if (!cn) return false;
 
     // Save state awal chapter
     gs.points = STARTING_POINT;
     gs.currentChapter = chapterId;
-    stateStack.clear();
-    stateStack.save(gs);
+    bool isRestart = false;
 
     while (true) {
         // Buat sesi baru: random pick event
@@ -1434,22 +1396,21 @@ bool playChapter(int chapterId, Event* pool, GameState& gs, StateStack& stateSta
                 gs.restartCount++;
                 displayRestart(gs.restartCount);
                 // Restore ke awal chapter
-                int savedRestarts = gs.restartCount;
-                gs = stateStack.getChapterInitial();
-                gs.restartCount = savedRestarts;
                 gs.points = STARTING_POINT;
-                stateStack.save(gs);
+                isRestart = true;
                 // Mulai sesi baru (break inner loop)
                 break;
             }
         }
 
         // Semua event habis tapi poin masih 1-99: sesi baru
-        if (gs.points > 0 && gs.points < WIN_POINT) {
+        if (gs.points > 0 && gs.points < WIN_POINT && !isRestart) {
             cout << "\n  Semua aktivitas selesai. Poin: " << gs.points << "\n";
             cout << "  Belum cukup untuk lanjut. Sesi baru dimulai...\n";
             pressEnter();
             // Loop while(true) akan membuat sesi baru dengan random event berbeda
+        } else {
+            isRestart = false;
         }
     }
 }
@@ -1468,7 +1429,6 @@ int main() {
 
     // Init game state
     GameState gs = {1, STARTING_POINT, 0, false, false};
-    StateStack stateStack;
 
     // ── Title Screen ─────────────────────────────────────────
     printSeparator();
@@ -1521,7 +1481,7 @@ int main() {
         // Pilih pool yang sesuai
         Event* pool = (cn->id == 1) ? poolChapter1 : poolChapter2;
 
-        bool won = playChapter(cn->id, pool, gs, stateStack);
+        bool won = playChapter(cn->id, pool, gs);
 
         if (won) {
             // Traversal graph: ambil node berikutnya via adjacency matrix
