@@ -81,12 +81,14 @@ struct GameState {
     int  restartCount;     // total restart sepanjang game
     bool gameOver;
     bool reachedEnding;
+    bool secretFlag;       // *** SECRET ENDING FLAG ***
+    bool syarifTrustGiven; // apakah pemain sudah jawab DM Syarif dengan benar
 };
 
 // ============================================================
 // LINKED LIST - Event Aktif
 // ============================================================
-//aaa
+
 struct EventNode {
     Event       data;
     EventNode*  next;
@@ -307,7 +309,7 @@ Character characters[] = {
     {"Dimas", "npc",
      "Teman sekelas Yosef. Energik, update soal tren konten."},
     {"Syarif", "npc",
-     "Content creator SMA yang menginspirasi Yosef."},
+     "Content creator SMA yang menginspirasi Yosef. Apakah dia hanya NPC biasa...?"},
 };
 
 // ============================================================
@@ -511,7 +513,7 @@ void buildPoolChapter1() {
                 "Ibu menaruh piring dan menatapmu. Lalu ia bercerita pelan -\n"
                 "  tentang Ayah, tentang tekanan kerja, tentang bagaimana\n"
                 "  rumah ini sedang dalam mode 'tahan napas'.\n"
-                "  Kamu menyimap setiap kata."
+                "  Kamu menyimak setiap kata."
             },
         }, 4
     };
@@ -648,7 +650,7 @@ void buildPoolChapter1() {
                 "  sepanjang hari."
             },
             {
-                "\"Kenapa hidup ini Yosefs sekeras ini?\" - Keluh.", -10,
+                "\"Kenapa hidup ini sekeras ini?\" - Keluh.", -10,
                 "Kata-kata itu keluar begitu saja.\n"
                 "  Dan entah kenapa, setelah diucapkan,\n"
                 "  bebannya tidak berkurang - malah sedikit bertambah."
@@ -664,10 +666,13 @@ void buildPoolChapter1() {
 }
 
 // ============================================================
-// DATA: POOL EVENT CHAPTER 2 (10 event)
+// DATA: POOL EVENT CHAPTER 2 (10 event + 1 secret event)
 // ============================================================
 
 Event poolChapter2[POOL_SIZE];
+
+// *** SECRET EVENT - tidak masuk pool normal, dipanggil khusus ***
+Event secretEventSyarif;
 
 void buildPoolChapter2() {
 
@@ -705,7 +710,7 @@ void buildPoolChapter2() {
         }, 4
     };
 
-    // Event 1: Istirahat - Akmal ajak nonton live Syarif
+    // Event 1: Istirahat - Syarif lagi live
     poolChapter2[1] = {
         201, "Istirahat - Syarif lagi live",
         "Dimas lari ke mejamu sambil pegang HP.\n"
@@ -780,7 +785,7 @@ void buildPoolChapter2() {
         203, "Dimas tanya soal channel YouTube",
         "Dimas duduk di sebelahmu waktu pulang.\n"
         "  \"Yosef, aku tahu kamu punya channel YouTube.\n"
-        "   Aku nggak sengaja nemu. Videomu... bagus, Har.\n"
+        "   Aku nggak sengaja nemu. Videomu... bagus.\n"
         "   Kenapa nggak pernah cerita?\"\n\n"
         "  Jantungmu berdegup.",
         {
@@ -800,7 +805,7 @@ void buildPoolChapter2() {
             {
                 "Pura-pura tidak tahu channel yang dimaksud.", -20,
                 "Dimas menatapmu dengan ekspresi terluka.\n"
-                "  'Aku sudah lihat videonya, Har. Aku nggak bohong.'\n"
+                "  'Aku sudah lihat videonya. Aku nggak bohong.'\n"
                 "  Kamu memalingkan muka - dan jarak itu terasa\n"
                 "  tiba-tiba lebih jauh dari sebelumnya."
             },
@@ -850,14 +855,17 @@ void buildPoolChapter2() {
         }, 4
     };
 
-    // Event 5: Sore - tawaran kolaborasi dari Syarif
+    // Event 5: DM dari Syarif
+    // *** KUNCI SECRET ENDING: pilihan [2] -> syarifTrustGiven = true ***
     poolChapter2[5] = {
         205, "DM dari Syarif",
         "HP-mu berbunyi. DM masuk.\n"
         "  Dari: @SyarifCreates\n"
         "  \"Hei, aku nemu channel-mu. Kontenmu raw dan jujur.\n"
         "   Mau kolaborasi video bareng minggu depan?\"\n\n"
-        "  Tanganmu gemetar sedikit.",
+        "  Tanganmu gemetar sedikit.\n\n"
+        "  [Petunjuk: Jawaban yang tepat mungkin membuka jalan\n"
+        "   yang tidak terduga...]",
         {
             {
                 "Balas: \"Mau banget! Kapan dan di mana?\"", -15,
@@ -866,11 +874,18 @@ void buildPoolChapter2() {
                 "  Panik kecil mulai merayap."
             },
             {
-                "Balas: \"Terima kasih. Boleh aku pikir dulu?\"", +25,
-                "Syarif balas: 'Sure, take your time.'\n"
-                "  Kamu taruh HP dan menarik napas.\n"
-                "  Kesempatan itu tidak kemana-mana - dan kamu punya waktu\n"
-                "  untuk mempersiapkan diri dengan benar."
+                // *** PILIHAN KUNCI SECRET ENDING ***
+                "Balas: \"Terima kasih. Boleh aku pikir dulu?\"\n"
+                "  Lalu tanya: \"Btw, aku penasaran... kamu siapa sebenarnya?\"",
+                +25,
+                "Syarif tidak langsung balas.\n"
+                "  Tiga menit berlalu. Lalu pesan masuk:\n"
+                "  'Sure, take your time.'\n"
+                "  Tapi ada jeda sebelum pesan kedua muncul:\n"
+                "  '...pertanyaan yang menarik. Belum ada yang tanya itu sebelumnya.'\n\n"
+                "  Sesuatu di perutmu terasa aneh.\n"
+                "  Bukan gugup biasa. Ini berbeda.\n"
+                "  Seperti kamu baru saja mengetuk pintu yang seharusnya tidak ada."
             },
             {
                 "Tidak balas dulu - terlalu overwhelmed.", -5,
@@ -982,13 +997,13 @@ void buildPoolChapter2() {
             {
                 "Rekam tapi tidak upload - simpan untuk diri sendiri.", +15,
                 "Kamu rekam dan simpan. Itu untuk dirimu sendiri -\n"
-                "  dan itu cukup. Tidak semua konten Yosefs dilihat orang lain\n"
+                "  dan itu cukup. Tidak semua konten harus dilihat orang lain\n"
                 "  untuk bermakna."
             },
             {
                 "Upload video lama yang sudah diedit.", +5,
                 "Video lama yang sudah diedit itu akhirnya terupload.\n"
-                "  SederHanif, tapi jujur. Kamu tutup laptop\n"
+                "  Sederhana, tapi jujur. Kamu tutup laptop\n"
                 "  dan tidur dengan perasaan yang tidak terlalu berat."
             },
             {
@@ -1031,8 +1046,53 @@ void buildPoolChapter2() {
                 "Tanya duluan: \"Ibu mau bilang apa?\"", +15,
                 "Ibu tersenyum kecil.\n"
                 "  'Ibu mau bilang... Ibu bangga kamu sudah bertahan sejauh ini.'\n"
-                "  Itu saja. Tapi kamu Yosefs tahan napas\n"
-                "  agar tidak terlalu keliatan terYosef."
+                "  Itu saja. Tapi kamu menahan napas\n"
+                "  agar tidak terlalu keliatan terharu."
+            },
+        }, 4
+    };
+
+    // *** SECRET EVENT 210: Pertemuan Lanjutan dengan Syarif ***
+    // Event ini hanya dimasukkan ke pool jika syarifTrustGiven == true
+    secretEventSyarif = {
+        210, "[???] Syarif menghubungi lagi - ada yang aneh",
+        "Tengah malam. Kamu hampir tertidur.\n"
+        "  HP berbunyi. DM dari @SyarifCreates.\n\n"
+        "  Tapi kali ini bukan tentang kolaborasi.\n\n"
+        "  'Kamu tadi tanya siapa aku sebenarnya.'\n"
+        "  'Aku akan jawab - tapi tidak lewat chat.'\n"
+        "  'Besok pukul 05.00 pagi. Taman belakang sekolah. Datang sendiri.'\n\n"
+        "  Kamu menatap layar. Jantungmu berdegup tidak wajar.\n"
+        "  Ada sesuatu di balik kata-kata itu yang terasa...\n"
+        "  bukan dari dunia ini.",
+        {
+            {
+                "Pergi - rasa ingin tahu lebih kuat dari rasa takut.", +30,
+                "Alarm kamu set pukul 04.45.\n"
+                "  Kamu tidak tahu kenapa, tapi kamu yakin.\n"
+                "  Ada sesuatu yang Syarif tahu - tentangmu,\n"
+                "  tentang situasi ini, tentang kenapa kamu ada di sini.\n\n"
+                "  Kamu pergi."
+            },
+            {
+                "Balas: \"Ini lelucon? Siapa yang kasih nomormu?\"", -5,
+                "Syarif tidak balas.\n"
+                "  Keesokan paginya, saat kamu cek akun @SyarifCreates -\n"
+                "  akunnya tidak ada.\n"
+                "  Seperti tidak pernah ada."
+            },
+            {
+                "Pergi tapi ajak Dimas - lebih aman.", -10,
+                "Kamu DM Dimas. Tapi HP-mu mati tiba-tiba.\n"
+                "  Saat kamu tiba di taman - tidak ada siapapun.\n"
+                "  Hanya angin pagi dan rasa sesal yang sulit dijelaskan."
+            },
+            {
+                "Abaikan. Ini terlalu aneh.", -20,
+                "Kamu taruh HP dan coba tidur.\n"
+                "  Tapi kamu tidak bisa.\n"
+                "  Dan pagi harinya, DM itu sudah terhapus sendiri.\n"
+                "  Seperti tidak pernah ada."
             },
         }, 4
     };
@@ -1043,13 +1103,11 @@ void buildPoolChapter2() {
 // ============================================================
 
 void clearScreen() {
-    // Portable clear
     cout << string(3, '\n');
 }
 
 void pressEnter() {
     cout << "\n[Tekan ENTER untuk melanjutkan...]";
-
     string dummy;
     getline(cin, dummy);
 }
@@ -1081,7 +1139,7 @@ void dfsGraph(int idx) {
     cout << "  [" << idx << "] " << chapterGraph[idx].title << "\n";
     for (int i = 0; i < CHAPTER_COUNT; i++) {
         if (chapterAdj[idx][i] == 1 && !dfsVisited[i]) {
-            cout << "       └─> ";
+            cout << "       \u2514\u2500> ";
             dfsGraph(i);
         }
     }
@@ -1106,35 +1164,30 @@ void displayChapterGraph() {
     printSeparator();
 }
 
-
 // ============================================================
-// MONOLOG RESTART (Array of strings)
+// MONOLOG RESTART
 // ============================================================
 
 const string restartMonologs[] = {
-    // restart 1
     "\"Eh-?!\"\n\n"
     "  Dunia berputar. Semuanya gelap sedetik.\n"
     "  Dan aku... di sini lagi.\n\n"
     "  Oke. Oke. Tenang. Aku salah pilih sesuatu.\n"
     "  Coba lagi. Kali ini lebih hati-hati.",
 
-    // restart 2
     "\"Lagi?!\"\n\n"
     "  Sensasinya seperti ditarik mundur paksa.\n"
     "  Dua kali. Aku sudah gagal dua kali.\n\n"
     "  Tapi aku mulai mengerti polanya.\n"
     "  Yosef butuh keseimbangan - bukan cuma berani, tapi juga bijak.",
 
-    // restart 3
     "Kali ini tidak ada teriakan.\n\n"
     "  Aku sudah tahu rasanya. Dingin. Gelap. Kembali lagi.\n\n"
     "  Tiga kali. Oke.\n"
-    "  Aku Yosefs berpikir seperti Yosef - bukan seperti diri sendiri.\n"
+    "  Aku harus berpikir seperti Yosef - bukan seperti diri sendiri.\n"
     "  Apa yang akan dilakukan seseorang yang mau menang\n"
     "  tanpa kehilangan segalanya?",
 
-    // restart 4+
     "Dunia berputar. Kembali lagi.\n\n"
     "  Sudah berapa kali ini?\n"
     "  Tapi aku semakin dekat. Aku bisa merasakannya.\n\n"
@@ -1150,11 +1203,9 @@ const int MONOLOG_COUNT = 4;
 void randomPickEvents(Event* pool, int poolSize,
                       int pickMin, int pickMax,
                       ActiveEventList& activeList) {
-    // Array biasa, bukan vector
     int indices[POOL_SIZE];
     for (int i = 0; i < poolSize; i++) indices[i] = i;
 
-    // Fisher-Yates shuffle - swap manual tanpa <algorithm>
     for (int i = poolSize - 1; i > 0; i--) {
         int j = rand() % (i + 1);
         int tmp = indices[i];
@@ -1163,12 +1214,10 @@ void randomPickEvents(Event* pool, int poolSize,
     }
 
     int pickCount = pickMin + (rand() % (pickMax - pickMin + 1));
-
     for (int i = 0; i < pickCount; i++) {
         activeList.insertNode(pool[indices[i]]);
     }
 }
-
 
 // ============================================================
 // DISPLAY CHAPTER HEADER
@@ -1199,7 +1248,6 @@ void displayPointBar(int points) {
 // ============================================================
 // PLAY SINGLE EVENT
 // ============================================================
-// Mengembalikan perubahan poin
 
 int playEvent(Event* ev, int currentPoints) {
     printSeparator();
@@ -1207,7 +1255,6 @@ int playEvent(Event* ev, int currentPoints) {
     cout << "  " << ev->narration << "\n";
     printLine();
 
-    // Tampilkan pilihan
     cout << "\n  Apa yang kamu lakukan?\n\n";
     for (int i = 0; i < ev->choiceCount; i++) {
         cout << "  [" << (i + 1) << "] " << ev->choices[i].text << "\n";
@@ -1216,17 +1263,12 @@ int playEvent(Event* ev, int currentPoints) {
     int pick = getInput(ev->choiceCount);
     Choice& chosen = ev->choices[pick - 1];
 
-    // CRUD: Ubah - update poin
     int newPoints = currentPoints + chosen.pointDelta;
 
     printLine();
-
-    // Tampilkan narasi respons pilihan
     cout << "\n  " << chosen.response << "\n";
-
     printLine();
 
-    // Tampilkan perubahan poin
     if (chosen.pointDelta > 0) {
         cout << "\n  + " << chosen.pointDelta << " poin! ("
              << currentPoints << " -> " << newPoints << ")\n";
@@ -1255,11 +1297,10 @@ void displayRestart(int restartCount) {
 
     cout << "\n  [ RESTART #" << restartCount << " ]\n";
 
-    int idx = (restartCount - 1 < MONOLOG_COUNT - 1) 
-          ? restartCount - 1 
+    int idx = (restartCount - 1 < MONOLOG_COUNT - 1)
+          ? restartCount - 1
           : MONOLOG_COUNT - 1;
 
-    // Array biasa, bukan vector<string>
     const int MAX_LINES = 50;
     string lines[MAX_LINES];
     int    lineCount = 0;
@@ -1276,14 +1317,203 @@ void displayRestart(int restartCount) {
     }
     if (!line.empty() && lineCount < MAX_LINES) lines[lineCount++] = line;
 
-    // Panggil dengan array biasa
     displayMonologQueue(lines, lineCount);
     pressEnter();
 }
 
+// ============================================================
+// *** SECRET ENDING ***
+// ============================================================
+
+void displaySecretEnding(int totalRestarts) {
+    printSeparator();
+    cout << "\n";
+    cout << "  *** S E C R E T   E N D I N G ***\n";
+    cout << "  Raja Bayangan\n";
+    printSeparator();
+
+    pressEnter();
+
+    // === Scene 1: Taman Belakang Sekolah ===
+    printSeparator();
+    cout << "\n  [ Taman Belakang Sekolah - Pukul 05.00 Pagi ]\n";
+    printSeparator();
+    cout << "\n"
+         << "  Langit masih gelap.\n"
+         << "  Taman belakang sekolah terasa berbeda di jam ini -\n"
+         << "  hening, tapi bukan hening yang kosong.\n"
+         << "  Seperti hening yang menahan napas.\n\n"
+         << "  Syarif berdiri di bawah pohon beringin tua.\n"
+         << "  Punggungnya menghadapmu.\n\n"
+         << "  \"Kamu datang.\"\n\n"
+         << "  Suaranya sama. Tapi ada sesuatu yang bergeser -\n"
+         << "  seperti nada di bawah kata-katanya yang bukan milik anak SMA.\n\n";
+    pressEnter();
+
+    cout << "  Ia berbalik.\n\n"
+         << "  Wajah Syarif sama. Seragam yang sama.\n"
+         << "  Tapi matanya - matanya berbeda.\n"
+         << "  Bukan coklat biasa. Ada sesuatu di dalamnya yang bergerak\n"
+         << "  seperti permukaan air di malam hari.\n\n"
+         << "  \"Aku sudah menunggu seseorang yang bertanya pertanyaan itu.\"\n\n"
+         << "  \"Selama sembilan kali reset.\"\n\n";
+    pressEnter();
+
+    // === Scene 2: Pengungkapan ===
+    printSeparator();
+    cout << "\n  [ Kebenaran ]\n";
+    printSeparator();
+    cout << "\n"
+         << "  Kamu membeku.\n\n"
+         << "  \"...Kamu tahu?\"\n\n"
+         << "  Syarif tersenyum - dan untuk pertama kali, senyum itu\n"
+         << "  tidak terasa seperti senyum konten kreator.\n"
+         << "  Itu senyum seseorang yang sudah sangat, sangat tua.\n\n"
+         << "  \"Aku tahu kamu bukan Yosef. Aku tahu kamu dari dunia lain.\n"
+         << "   Aku tahu ini bukan pertama kalinya kamu di sini.\"\n\n"
+         << "  Ia melangkah mendekatimu.\n\n"
+         << "  \"Karena aku yang menaruhmu di sini.\"\n\n";
+    pressEnter();
+
+    cout << "  Dunia di sekitarmu seolah berhenti berputar.\n\n"
+         << "  \"Namaku bukan Syarif. Nama itu hanya... baju.\"\n"
+         << "  \"Dalam bahasa yang manusia sudah lupakan sejak seribu tahun lalu,\n"
+         << "   namaku adalah Azar-Rein. Raja Bayangan. Penguasa batas antara\n"
+         << "   fiksi dan realitas.\"\n\n"
+         << "  Ia mengangkat tangannya - dan di antara jari-jarinya,\n"
+         << "  kamu bisa melihat sesuatu yang mustahil:\n"
+         << "  halaman-halaman manga yang bergerak seperti cahaya.\n\n"
+         << "  \"Duniamu - dunia Ren - adalah salah satu dari ribuan cerita\n"
+         << "   yang kulindungi. Tapi terkadang, seseorang dari luar cerita\n"
+         << "   jatuh ke dalamnya. Dan ketika itu terjadi...\"\n\n"
+         << "  \"...mereka menjadi kunci yang bisa mengubah segalanya.\"\n\n";
+    pressEnter();
+
+    // === Scene 3: Pilihan Final ===
+    printSeparator();
+    cout << "\n  [ Pilihan Terakhir ]\n";
+    printSeparator();
+    cout << "\n"
+         << "  Syarif - Azar-Rein - menatapmu dalam.\n\n"
+         << "  \"Ada dua hal yang bisa kulakukan untukmu.\"\n\n"
+         << "  \"Pertama: aku kembalikan kamu ke duniamu. Ke tubuh Ren.\n"
+         << "   Kamu melanjutkan hidupmu. Yosef akan menjalani ceritanya sendiri.\n"
+         << "   Tanpa intervensi. Seperti seharusnya.\"\n\n"
+         << "  \"Kedua: kamu tetap di sini. Selesaikan cerita Yosef.\n"
+         << "   Bantu ia sampai ending yang sesungguhnya.\n"
+         << "   Tapi sebagai gantinya - kamu tidak akan ingat cara pulang.\"\n\n"
+         << "  Ia menatapmu, menunggu.\n\n";
+
+    cout << "  Apa jawabanmu?\n\n";
+    cout << "  [1] \"Aku ingin pulang ke duniaku.\"\n";
+    cout << "  [2] \"Aku akan tetap dan selesaikan cerita Yosef.\"\n";
+    cout << "  [3] \"Aku tidak percaya padamu. Buktikan dulu.\"\n\n";
+
+    int finalChoice = getInput(3);
+
+    printSeparator();
+
+    if (finalChoice == 1) {
+        // === Ending Percabangan A: Pulang ===
+        cout << "\n  [ SECRET ENDING A: Pulang ]\n";
+        printSeparator();
+        cout << "\n"
+             << "  \"Aku ingin pulang.\"\n\n"
+             << "  Azar-Rein mengangguk pelan. Tidak ada ekspresi kecewa.\n"
+             << "  Tidak ada paksaan.\n\n"
+             << "  \"Itu jawaban yang jujur. Aku hormati itu.\"\n\n"
+             << "  Ia menjentikkan jarinya.\n"
+             << "  Halaman-halaman manga berputar di sekitar kalian -\n"
+             << "  semakin cepat, semakin terang, sampai semuanya putih.\n\n"
+             << "  Dan kemudian -\n\n"
+             << "  ---\n\n"
+             << "  Matamu terbuka.\n"
+             << "  Langit-langit kamarmu sendiri.\n"
+             << "  Bau familiar - kamar Ren. Duniamu.\n\n"
+             << "  Di atas mejamu, manga yang kamu beli hari itu masih terbuka\n"
+             << "  di halaman terakhir yang sempat kamu baca.\n"
+             << "  Yosef Situmorang tersenyum dari panel terakhir.\n\n"
+             << "  Kamu tidak tahu bagaimana ceritanya berakhir.\n"
+             << "  Tapi entah kenapa, kamu yakin ia baik-baik saja.\n\n"
+             << "  Mungkin karena kamu sudah belajar -\n"
+             << "  bahkan dari luar ceritanya.\n\n";
+    } else if (finalChoice == 2) {
+        // === Ending Percabangan B: Tetap ===
+        cout << "\n  [ SECRET ENDING B: Penjaga Cerita ]\n";
+        printSeparator();
+        cout << "\n"
+             << "  \"Aku akan tetap.\"\n\n"
+             << "  Ada sesuatu yang berubah di mata Azar-Rein.\n"
+             << "  Bukan terkejut. Lebih seperti... lega.\n\n"
+             << "  \"Aku tidak menyangka.\"\n\n"
+             << "  \"Dari sembilan orang sebelummu - tidak ada yang menjawab ini.\"\n\n"
+             << "  Ia menaruh tangannya di bahumu.\n\n"
+             << "  \"Maka aku beri kamu satu hal yang tidak kuberi siapapun:\n"
+             << "   kesadaran penuh. Kamu akan tahu kamu bukan Yosef,\n"
+             << "   tapi kamu akan bisa selesaikan ceritanya - dengan caramu.\"\n\n"
+             << "  \"Dan ketika cerita ini selesai...\"\n\n"
+             << "  Ia tersenyum, dan untuk pertama kali, senyum itu terasa tulus.\n\n"
+             << "  \"...mungkin aku yang akan memintamu untuk cerita lain.\"\n\n"
+             << "  ---\n\n"
+             << "  Enam bulan kemudian, channel Yosef mencapai 8.700 subscriber.\n"
+             << "  Ayah menandatangani perjanjian itu.\n"
+             << "  Ceritanya selesai - dengan baik.\n\n"
+             << "  Dan di taman belakang sekolah yang sama,\n"
+             << "  Azar-Rein berdiri di bawah pohon beringin.\n"
+             << "  Ia membuka buku - bukan manga. Sesuatu yang lebih tua.\n\n"
+             << "  Di dalamnya, ada nama Ren. Dan di sebelahnya,\n"
+             << "  sebuah judul cerita baru yang belum kamu kenal.\n\n"
+             << "  Ia tersenyum.\n\n"
+             << "  \"Sampai jumpa di cerita berikutnya.\"\n\n";
+    } else {
+        // === Ending Percabangan C: Tantang ===
+        cout << "\n  [ SECRET ENDING C: Yang Menantang Raja ]\n";
+        printSeparator();
+        cout << "\n"
+             << "  \"Buktikan dulu.\"\n\n"
+             << "  Azar-Rein terdiam.\n\n"
+             << "  Satu detik.\n"
+             << "  Dua detik.\n\n"
+             << "  Lalu ia tertawa.\n\n"
+             << "  Bukan tawa jahat. Bukan tawa meremehkan.\n"
+             << "  Tawa seseorang yang tidak pernah mendapat jawaban ini.\n\n"
+             << "  \"Dari semua jiwa yang pernah jatuh ke dalam cerita,\"\n"
+             << "  ia berkata, masih tertawa kecil,\n"
+             << "  \"tidak ada yang pernah berani bilang itu kepadaku.\"\n\n"
+             << "  Ia menatapmu lama.\n\n"
+             << "  \"Baik. Bukti.\"\n\n"
+             << "  Ia mengangkat tangan - dan di antara jari-jarinya,\n"
+             << "  muncul sebuah halaman manga.\n"
+             << "  Di dalamnya: panel truk. Panel langit oranye. Panel Ren.\n\n"
+             << "  Harimu yang terakhir - dari sudut pandang orang lain.\n\n"
+             << "  \"Itu cukup?\"\n\n"
+             << "  ---\n\n"
+             << "  Kamu tidak menjawab.\n"
+             << "  Karena kamu sudah tahu jawabannya.\n\n"
+             << "  Dan Azar-Rein, untuk pertama kali dalam seribu tahun,\n"
+             << "  menemukan seseorang yang tidak mau begitu saja percaya -\n"
+             << "  bahkan kepada Raja Bayangan.\n\n"
+             << "  \"Kuanggap itu 'ya'.\"\n\n"
+             << "  \"Lanjutkan ceritanya. Aku akan mengawasi.\"\n\n"
+             << "  \"Dan mungkin - suatu hari - kamu yang akan menantangku\n"
+             << "   untuk lebih dari sekadar bukti.\"\n\n";
+    }
+
+    printSeparator();
+    cout << "\n"
+         << "              [ SECRET ENDING - SELESAI ]\n\n"
+         << "   \"Ada cerita yang ditulis untuk dibaca,\n"
+         << "    dan ada yang ditulis untuk dijalani.\n"
+         << "    Kamu salah satu dari yang kedua.\"\n"
+         << "                              - Azar-Rein\n\n";
+    printSeparator();
+    cout << "\n  Total restart: " << totalRestarts << " kali.\n";
+    cout << "  SECRET ENDING berhasil ditemukan!\n";
+    cout << "  Terima kasih sudah memainkan MANGA RESET.\n\n";
+}
 
 // ============================================================
-// DISPLAY ENDING
+// DISPLAY ENDING (Normal)
 // ============================================================
 
 void displayEnding(int totalRestarts) {
@@ -1325,42 +1555,49 @@ void displayEnding(int totalRestarts) {
 // ============================================================
 // PLAY CHAPTER
 // ============================================================
-// Return: true = lanjut ke chapter berikutnya, false = game selesai
 
 bool playChapter(int chapterId, Event* pool, GameState& gs) {
     ChapterNode* cn = findChapterNode(chapterId);
     if (!cn) return false;
 
-    // Save state awal chapter
     gs.points = STARTING_POINT;
     gs.currentChapter = chapterId;
     bool isRestart = false;
 
+    // *** Jika Chapter 2 dan syarifTrustGiven, masukkan secret event ke pool sesi ini ***
+    // Kita tandai apakah secret event sudah pernah dimainkan sesi ini
+    bool secretEventUsed = false;
+
     while (true) {
-        // Buat sesi baru: random pick event
         ActiveEventList activeList;
         randomPickEvents(pool, POOL_SIZE, MIN_EVENTS, MAX_EVENTS, activeList);
 
+        // *** SECRET: Sisipkan secret event di Chapter 2 jika syarat terpenuhi ***
+        if (chapterId == 2 && gs.syarifTrustGiven && !secretEventUsed) {
+            activeList.insertNode(secretEventSyarif);
+        }
+
         displayChapterHeader(cn, gs.points);
         cout << "\n  " << activeList.count << " aktivitas tersedia sesi ini.\n";
+
+        // *** Hint kecil jika secret flag aktif ***
+        if (chapterId == 2 && gs.syarifTrustGiven && !secretEventUsed) {
+            cout << "\n  [Petunjuk tersembunyi terdeteksi di sesi ini...]\n";
+        }
+
         pressEnter();
 
-        // Loop sesi: player pilih event satu per satu
         while (!activeList.isEmpty()) {
             clearScreen();
             displayChapterHeader(cn, gs.points);
             displayPointBar(gs.points);
 
-            // CRUD: Tampilkan - render menu event aktif
             activeList.displayMenu();
-
-            // Tambahkan opsi lihat karakter
             cout << "  [" << (activeList.count + 1) << "] Lihat daftar karakter\n";
             printLine();
 
             int menuChoice = getInput(activeList.count + 1);
 
-            // Opsi lihat karakter
             if (menuChoice == activeList.count + 1) {
                 printSeparator();
                 cout << "\n  --- Karakter dalam Cerita ---\n\n";
@@ -1372,43 +1609,60 @@ bool playChapter(int chapterId, Event* pool, GameState& gs) {
                 continue;
             }
 
-            // Ambil event yang dipilih
             Event* selectedEvent = activeList.getByMenuIndex(menuChoice);
             if (!selectedEvent) continue;
 
             int eventId = selectedEvent->id;
 
-            // Main event - CRUD: Ubah (poin berubah)
+            // *** Cek apakah ini event DM Syarif (205) untuk set flag ***
+            bool isDMSyarif = (eventId == 205);
+
             int delta = playEvent(selectedEvent, gs.points);
             gs.points += delta;
 
-            // CRUD: Hapus - hapus event dari linked list setelah selesai
+            // *** SET FLAG: jika pemain pilih opsi [2] di event 205 (delta = +25 dan response mengandung tanda tangan kunci) ***
+            // Cara deteksinya: kita track sebelum playEvent, apakah choice index yang dipilih adalah index ke-1 (0-based)
+            // Namun karena playEvent tidak return choice index, kita gunakan trik:
+            // delta == +25 dari event 205 adalah HANYA pilihan ke-2 (index 1)
+            if (isDMSyarif && delta == 25) {
+                gs.syarifTrustGiven = true;
+                cout << "\n  [Sesuatu terasa berbeda setelah pesan itu...]\n";
+                pressEnter();
+            }
+
+            // *** Cek apakah secret event dimainkan ***
+            if (eventId == 210) {
+                secretEventUsed = true;
+                // Pilihan [1] (delta = +30) mengaktifkan secret ending
+                if (delta == 30) {
+                    gs.secretFlag = true;
+                    cout << "\n  [Sebuah jalur tersembunyi terbuka...]\n";
+                    pressEnter();
+                }
+            }
+
             activeList.deleteNode(eventId);
 
-            // Cek poin
             if (gs.points >= WIN_POINT) {
                 cout << "\n  Poin mencapai " << gs.points
                      << "! Kamu berhasil melewati chapter ini!\n";
                 pressEnter();
-                return true;   // lanjut ke chapter berikutnya
+                return true;
             }
             if (gs.points <= 0) {
                 gs.restartCount++;
                 displayRestart(gs.restartCount);
-                // Restore ke awal chapter
                 gs.points = STARTING_POINT;
                 isRestart = true;
-                // Mulai sesi baru (break inner loop)
+                secretEventUsed = false; // reset per sesi
                 break;
             }
         }
 
-        // Semua event habis tapi poin masih 1-99: sesi baru
         if (gs.points > 0 && gs.points < WIN_POINT && !isRestart) {
             cout << "\n  Semua aktivitas selesai. Poin: " << gs.points << "\n";
             cout << "  Belum cukup untuk lanjut. Sesi baru dimulai...\n";
             pressEnter();
-            // Loop while(true) akan membuat sesi baru dengan random event berbeda
         } else {
             isRestart = false;
         }
@@ -1422,13 +1676,12 @@ bool playChapter(int chapterId, Event* pool, GameState& gs) {
 int main() {
     srand(static_cast<unsigned>(time(nullptr)));
 
-    // Build semua data
     buildChapterGraph();
     buildPoolChapter1();
     buildPoolChapter2();
 
-    // Init game state
-    GameState gs = {1, STARTING_POINT, 0, false, false};
+    // Init game state - tambah secretFlag dan syarifTrustGiven
+    GameState gs = {1, STARTING_POINT, 0, false, false, false, false};
 
     // ── Title Screen ─────────────────────────────────────────
     printSeparator();
@@ -1438,6 +1691,8 @@ int main() {
     cout << "  Sebuah cerita tentang pilihan, keluarga, dan impian.\n";
     cout << "  Kumpulkan 100 poin di setiap chapter untuk melanjutkan.\n";
     cout << "  Poin habis - kamu kembali ke awal chapter.\n";
+    cout << "\n";
+    cout << "  [ Ada sesuatu yang tersembunyi di balik cerita ini... ]\n";
     cout << "\n";
     printSeparator();
     pressEnter();
@@ -1461,36 +1716,52 @@ int main() {
          << "  Yosef Situmorang. MC dari sebuah manga slice of life\n"
          << "  yang aku baca sekitar 5 tahun lalu.\n\n"
          << "  Hidupnya keras. Keluarganya keras.\n"
-         << "  Dan ada cerita yang Yosefs kujalani.\n\n"
+         << "  Dan ada cerita yang harus kujalani.\n\n"
          << "  Semoga aku ingat cukup banyak untuk tidak merusaknya.\n\n";
     pressEnter();
 
-    // ── Game Loop - Graph traversal via adjacency matrix ─────
-    int currentIndex = 0;   // mulai dari node index 0 (Chapter 1)
+    // ── Game Loop ─────────────────────────────────────────────
+    int currentIndex = 0;
 
     while (true) {
         ChapterNode* cn = &chapterGraph[currentIndex];
 
-        // Ending node
         if (cn->id == 99) {
-            displayChapterGraph();   // tampilkan graph sebelum ending
-            displayEnding(gs.restartCount);
+            displayChapterGraph();
+
+            // *** Cek secret ending sebelum ending normal ***
+            if (gs.secretFlag) {
+                printSeparator();
+                cout << "\n  Sebelum kamu sampai ke ending yang kamu kenal -\n";
+                cout << "  ada sesuatu yang masih belum terselesaikan.\n";
+                cout << "  Sebuah pertemuan. Sebuah kebenaran.\n";
+                printSeparator();
+                pressEnter();
+                displaySecretEnding(gs.restartCount);
+            } else {
+                displayEnding(gs.restartCount);
+
+                // *** Hint secret ending jika syarat hampir terpenuhi ***
+                if (gs.syarifTrustGiven && !gs.secretFlag) {
+                    printSeparator();
+                    cout << "\n  [ Kamu dekat dengan sesuatu yang tersembunyi.\n";
+                    cout << "    Mungkin lain kali, jawaban yang berbeda\n";
+                    cout << "    akan membuka pintu yang berbeda pula. ]\n";
+                    printSeparator();
+                }
+            }
             break;
         }
 
-        // Pilih pool yang sesuai
         Event* pool = (cn->id == 1) ? poolChapter1 : poolChapter2;
 
         bool won = playChapter(cn->id, pool, gs);
 
         if (won) {
-            // Traversal graph: ambil node berikutnya via adjacency matrix
             int nextIndex = getNextChapterIndex(currentIndex);
             if (nextIndex == -1) break;
             currentIndex = nextIndex;
         }
-        // Jika kalah: playChapter sudah handle restart internal,
-        // currentIndex tidak berubah (tetap di chapter yang sama)
     }
 
     printSeparator();
@@ -1500,4 +1771,3 @@ int main() {
 
     return 0;
 }
-
