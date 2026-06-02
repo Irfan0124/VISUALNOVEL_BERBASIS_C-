@@ -86,7 +86,7 @@ struct GameState {
 // ============================================================
 // LINKED LIST - Event Aktif
 // ============================================================
-
+//aaa
 struct EventNode {
     Event       data;
     EventNode*  next;
