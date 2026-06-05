@@ -2,8 +2,8 @@
  * ============================================================
  *  MANGA RESET: Dunia yang Kulupa
  *  Terminal Story Game - C++
- * ============================================================
  *  Struktur Data yang Digunakan:
+ * ============================================================
  *  1. Array       : pool event per chapter, array pilihan - Syarif
  *  2. Struct      : Event, Choice, Character, GameState, ChapterNode - Irfan
  *  3. Pointer     : navigasi linked list (EventNode*) - Shauqy
@@ -21,6 +21,8 @@
 
 #include <iostream>
 #include <string>
+
+// random logic
 #include <cstdlib>
 #include <ctime>
 #include <limits>
@@ -179,31 +181,49 @@ struct ActiveEventList {
 // QUEUE - Display Monolog Restart (implementasi manual)
 // ============================================================
 
+void pressEnter() {
+    cout << "\n[Tekan ENTER untuk melanjutkan...]";
+    string dummy;
+    getline(cin, dummy);
+}
+
 const int QUEUE_CAPACITY = 100;
 
 struct MonologQueue {
     string data[QUEUE_CAPACITY];
-    int    front, rear, count;
+    int count;
 
-    void create() { front = 0; rear = -1; count = 0; }
+    void create() { count = 0; }
 
     bool isEmpty() { return count == 0; }
     bool isFull()  { return count == QUEUE_CAPACITY; }
 
     void enqueue(const string& s) {
         if (!isFull()) {
-            rear = (rear + 1) % QUEUE_CAPACITY;
-            data[rear] = s;
+            data[count] = s;
             count++;
         }
     }
 
-    string dequeue() {
-        string s = data[front];
-        front = (front + 1) % QUEUE_CAPACITY;
-        count--;
-        return s;
-    }
+    string dequeue(){
+        if (!isEmpty()){
+            string text = data[0];
+            count -= 1;
+            for (int i=0;i<count;i++){
+                data[i] = data[i+1];
+            }
+            data[count] = "";
+
+            if (text == "") { 
+                pressEnter();
+            }
+
+            return text;
+        } else {
+            cout << "Antrian Kosong";
+            return "Antrian Kosong";
+        }
+    };
 };
 
 void displayMonologQueue(string lines[], int lineCount) {
@@ -1103,13 +1123,7 @@ void buildPoolChapter2() {
 // ============================================================
 
 void clearScreen() {
-    cout << string(3, '\n');
-}
-
-void pressEnter() {
-    cout << "\n[Tekan ENTER untuk melanjutkan...]";
-    string dummy;
-    getline(cin, dummy);
+    cout << "\n\n\n";
 }
 
 void printSeparator() {
