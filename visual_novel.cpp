@@ -214,6 +214,7 @@ struct MonologQueue {
             }
             data[count] = "";
 
+            // tambahin logic enter
             if (text == "") { 
                 pressEnter();
             }
