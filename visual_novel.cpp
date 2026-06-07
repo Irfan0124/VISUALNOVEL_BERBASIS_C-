@@ -22,10 +22,6 @@
 #include <iostream>
 #include <string>
 
-// random logic
-#include <cstdlib>
-#include <ctime>
-#include <limits>
 
 using namespace std;
 
@@ -1140,11 +1136,11 @@ int getInput(int maxVal) {
     while (true) {
         cout << "\n  > Pilihanmu: ";
         if (cin >> c && c >= 1 && c <= maxVal) {
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cin.ignore(999, '\n');
             return c;
         }
         cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cin.ignore(999, '\n');
         cout << "  Masukkan angka antara 1 dan " << maxVal << ".\n";
     }
 }
@@ -1705,7 +1701,6 @@ bool playChapter(int chapterId, Event* pool, GameState& gs) {
 // ============================================================
 
 int main() {
-    srand(static_cast<unsigned>(time(nullptr)));
 
     buildChapterGraph();
     buildPoolChapter1();
