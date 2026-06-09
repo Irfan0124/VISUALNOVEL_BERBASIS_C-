@@ -37,7 +37,7 @@ const int MAX_EVENTS     = 6;
 const int STARTING_POINT = 50;
 const int WIN_POINT      = 100;
 
-const int CHAPTER_COUNT = 3;
+const int CHAPTER_COUNT = 4;
 
 // ============================================================
 // GRAPH - Adjacency Matrix & Traversal
@@ -280,11 +280,35 @@ int chapterIdToIndex(int id) {
 }
 
 int getNextChapterIndex(int currentIndex) {
+    
     for (int i = 0; i < CHAPTER_COUNT; i++) {
         if (chapterAdj[currentIndex][i] == 1 && i != currentIndex)
             return i;
     }
     return -1;
+}
+
+int getEndingIndex(int currentIndex, const GameState& gs) {
+
+    int candidates[CHAPTER_COUNT];
+    int count = 0;
+    for (int i = 0; i < CHAPTER_COUNT; i++) {
+        if (chapterAdj[currentIndex][i] == 1 && i > currentIndex) {
+            candidates[count++] = i;
+        }
+    }
+
+    if (count == 0) return -1;
+    if (count == 1) return candidates[0];
+
+    // candidates[0] = node 2 (Good Ending, id=99)
+    // candidates[1] = node 3 (Neutral Ending, id=98)
+    const int RESTART_THRESHOLD = 1; // bisa diubah sesuai keinginan
+    if (gs.restartCount < RESTART_THRESHOLD) {
+        return candidates[0]; // Good Ending
+    } else {
+        return candidates[1]; // Neutral Ending
+    }
 }
 
 void buildChapterGraph() {
@@ -294,11 +318,14 @@ void buildChapterGraph() {
                        "Sekolah dan sepulang sekolah",           99, 2};
     chapterGraph[2] = {99, "Ending: Perjanjian dengan Ayah",
                        "Rumah - malam hari",                     -1, -1};
+    chapterGraph[3] = {98, "Ending: Kompromi Setengah Hati",
+                        "Rumah - malam hari", -1, -1};
 
     initGraph();
     tambahEdge(0, 1);
     tambahEdge(0, 0);
-    tambahEdge(1, 2);
+    tambahEdge(1, 2);   // edge ke good ending
+    tambahEdge(1, 3);   // *** edge ke neutral ending (baru) ***
     tambahEdge(1, 1);
 }
 
@@ -1151,7 +1178,7 @@ void dfsGraph(int idx) {
     cout << "  [" << idx << "] " << chapterGraph[idx].title << "\n";
     for (int i = 0; i < CHAPTER_COUNT; i++) {
         if (chapterAdj[idx][i] == 1 && !dfsVisited[i]) {
-            cout << "       ------> ";
+            cout << "       --> ";
             dfsGraph(i);
         }
     }
@@ -1336,10 +1363,11 @@ void displayRestart(int restartCount) {
 }
 
 // ============================================================
-// SECRET ENDING BY IRFAN 
+// SECRET ENDING BY IRFAN  
 // ============================================================
 
 void displaySecretEnding(int totalRestarts) {
+    
     printSeparator();
     cout << "\n";
     cout << "  *** S E C R E T   E N D I N G ***\n";
@@ -1531,7 +1559,7 @@ void displaySecretEnding(int totalRestarts) {
 void displayEnding(int totalRestarts) {
     printSeparator();
     cout << "\n";
-    cout << "  ENDING: Perjanjian dengan Ayah\n";
+    cout << "  ENDING 1: Perjanjian dengan Ayah\n";
     printSeparator();
     cout << "\n"
          << "  \"Aku punya usul, Ayah.\"\n\n"
@@ -1561,6 +1589,42 @@ void displayEnding(int totalRestarts) {
          << "    kadang itu cara paling elegan untuk menang bersama.\"\n\n";
     printSeparator();
     cout << "\n  Total restart: " << totalRestarts << " kali.\n";
+    cout << "  Terima kasih sudah memainkan MANGA RESET.\n\n";
+}
+
+void displayNeutralEnding(int totalRestarts) {
+    printSeparator();
+    cout << "\n";
+    cout << "  ENDING 2: Kompromi Setengah Hati\n";
+    printSeparator();
+    cout << "\n"
+         << "  \"Aku punya usul, Ayah.\"\n\n"
+         << "  Kamu membuka buku catatan itu.\n"
+         << "  Dua kolom - tapi tulisannya lebih ragu dari yang kamu bayangkan.\n\n"
+         << "  Ayah membaca sebentar. Mengangguk pelan.\n"
+         << "  Tapi ia tidak mengambil pena.\n\n"
+         << "  \"Kita lihat dulu nilaimu semester ini.\"\n\n"
+         << "  Bukan penolakan. Tapi bukan persetujuan juga.\n"
+         << "  Kamu tahu artinya: kamu harus membuktikannya dulu.\n\n";
+    printLine();
+    cout << "\n"
+         << "  Enam bulan kemudian:\n"
+         << "  Channel Yosef: 1.200 subscriber.\n"
+         << "  Nilai rata-rata Yosef: 82.\n\n"
+         << "  Belum ada tanda tangan Ayah.\n"
+         << "  Tapi ia pernah sekali, diam-diam, menonton satu video sampai habis.\n\n"
+         << "  Yosef tidak tahu. Tapi Ibu melihatnya.\n\n"
+         << "  Cerita ini belum selesai -\n"
+         << "  tapi setidaknya, ia berjalan ke arah yang benar.\n\n";
+    printSeparator();
+    cout << "\n"
+         << "              [ ENDING ALTERNATIF - SELESAI ]\n\n"
+         << "   \"Tidak semua kemenangan datang sekaligus.\n"
+         << "    Kadang yang terbaik adalah membuktikan,\n"
+         << "    satu hari dalam satu waktu.\"\n\n";
+    printSeparator();
+    cout << "\n  Total restart: " << totalRestarts << " kali.\n";
+    cout << "  Hint: Kurangi restart untuk melihat ending yang berbeda.\n";
     cout << "  Terima kasih sudah memainkan MANGA RESET.\n\n";
 }
 
@@ -1684,7 +1748,7 @@ bool playChapter(int chapterId, Event* pool, GameState& gs) {
                 gs.points = STARTING_POINT;
                 isRestart = true;
                 secretEventUsed = false;
-                break;
+                return false;
             }
         }
 
@@ -1755,7 +1819,7 @@ int main() {
         ChapterNode* cn = &chapterGraph[currentIndex];
 
         if (cn->id == 99) {
-            displayChapterGraph();
+            
 
             // Cek secret ending
             if (gs.secretFlag) {
@@ -1766,6 +1830,7 @@ int main() {
                 printSeparator();
                 pressEnter();
                 displaySecretEnding(gs.restartCount);
+
             } else {
                 displayEnding(gs.restartCount);
 
@@ -1779,6 +1844,13 @@ int main() {
                 }
 
             }
+            displayChapterGraph();
+            break;
+        }
+
+        if (cn->id == 98) {
+            displayNeutralEnding(gs.restartCount);
+            displayChapterGraph();
             break;
         }
 
@@ -1787,9 +1859,19 @@ int main() {
         bool won = playChapter(cn->id, pool, gs);
 
         if (won) {
-            int nextIndex = getNextChapterIndex(currentIndex);
+            int nextIndex;
+            if (cn->id == 2) {
+                // Chapter 2 selesai -> tentukan ending via graph
+                nextIndex = getEndingIndex(currentIndex, gs);
+            } else {
+                nextIndex = getNextChapterIndex(currentIndex);
+            }
+
             if (nextIndex == -1) break;
             currentIndex = nextIndex;
+        }
+        else {
+            currentIndex = 0; // Restart ke chapter 1 setelah gagal
         }
     }
 
