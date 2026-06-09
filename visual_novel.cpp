@@ -280,6 +280,7 @@ int chapterIdToIndex(int id) {
 }
 
 int getNextChapterIndex(int currentIndex) {
+    
     for (int i = 0; i < CHAPTER_COUNT; i++) {
         if (chapterAdj[currentIndex][i] == 1 && i != currentIndex)
             return i;
@@ -1151,7 +1152,8 @@ void dfsGraph(int idx) {
     cout << "  [" << idx << "] " << chapterGraph[idx].title << "\n";
     for (int i = 0; i < CHAPTER_COUNT; i++) {
         if (chapterAdj[idx][i] == 1 && !dfsVisited[i]) {
-            cout << "       \u2514\u2500> ";
+            cout << "       --> ";
+            
             dfsGraph(i);
         }
     }
@@ -1340,6 +1342,7 @@ void displayRestart(int restartCount) {
 // ============================================================
 
 void displaySecretEnding(int totalRestarts) {
+    
     printSeparator();
     cout << "\n";
     cout << "  *** S E C R E T   E N D I N G ***\n";
@@ -1754,7 +1757,7 @@ int main() {
         ChapterNode* cn = &chapterGraph[currentIndex];
 
         if (cn->id == 99) {
-            displayChapterGraph();
+            
 
             // Cek secret ending
             if (gs.secretFlag) {
@@ -1765,6 +1768,7 @@ int main() {
                 printSeparator();
                 pressEnter();
                 displaySecretEnding(gs.restartCount);
+
             } else {
                 displayEnding(gs.restartCount);
 
@@ -1778,6 +1782,7 @@ int main() {
                 }
 
             }
+            displayChapterGraph();
             break;
         }
 
