@@ -1151,7 +1151,7 @@ void dfsGraph(int idx) {
     cout << "  [" << idx << "] " << chapterGraph[idx].title << "\n";
     for (int i = 0; i < CHAPTER_COUNT; i++) {
         if (chapterAdj[idx][i] == 1 && !dfsVisited[i]) {
-            cout << "       \u2514\u2500> ";
+            cout << "       ------> ";
             dfsGraph(i);
         }
     }
@@ -1583,6 +1583,7 @@ bool playChapter(int chapterId, Event* pool, GameState& gs) {
         ActiveEventList activeList;
 
         if (chapterId == 2) {
+            
             // *** Chapter 2: Event 205 (DM Syarif) SELALU ada di setiap sesi ***
             // Ambil event acak dari pool, tapi KECUALIKAN index 5 (event 205)
             // lalu sisipkan event 205 secara manual di akhir
