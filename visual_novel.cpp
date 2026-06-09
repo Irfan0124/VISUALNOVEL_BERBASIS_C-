@@ -1324,7 +1324,7 @@ void displayRestart(int restartCount) {
 }
 
 // ============================================================
-// SECRET ENDING BY IRFAN 
+// SECRET ENDING BY IRFAN  
 // ============================================================
 
 void displaySecretEnding(int totalRestarts) {
@@ -1671,7 +1671,7 @@ bool playChapter(int chapterId, Event* pool, GameState& gs) {
                 gs.points = STARTING_POINT;
                 isRestart = true;
                 secretEventUsed = false;
-                break;
+                return false;
             }
         }
 
@@ -1778,6 +1778,8 @@ int main() {
             int nextIndex = getNextChapterIndex(currentIndex);
             if (nextIndex == -1) break;
             currentIndex = nextIndex;
+        }else{
+            currentIndex = 0; // Restart ke chapter 1 setelah gagal
         }
     }
 
